@@ -57,9 +57,10 @@ def calcFuelConstraint(rLift, *args):
 BPlot = False
 nan = float('nan')
 
-# import CSV files with the following data: "Time","Ground Speed","G Force Lat","G Force Long","ThrottleRaw","BrakeRaw","FuelUsePerHour","Fuel Density","Lap Distance","FuelLevel","LapDistPct","aTrackIncline","GPS Altitude"
-filename ='fordgt2017_monza full 2020-04-04 15-09-18_Stint_1.csv'
-header = ["tLap","vCar","gLat","gLong","rThrottle","rBrake","QFuel","rhoFuel","sLap","FuelLevel","LapDistPct","aTrackIncline","GPSAltitude"]
+# import CSV files with the following data: "Time", "Ground Speed", "G Force Lat", "G Force Long", "ThrottleRaw", "BrakeRaw", "FuelUsePerHour", "Fuel Density", "Lap Distance", "FuelLevel",
+# "LapDistPct", "aTrackIncline", "GPS Altitude"
+filename = 'fordgt2017_monza full 2020-04-04 15-09-18_Stint_1.csv'
+header = ["tLap", "vCar", "gLat", "gLong", "rThrottle", "rBrake", "QFuel", "rhoFuel", "sLap", "FuelLevel", "LapDistPct", "aTrackIncline", "GPSAltitude"]
 
 # declare baseline data dict and fill it from CSV
 d = {}
@@ -74,10 +75,13 @@ with open(filename) as csv_file:
             d[header[i]] = np.append(d[header[i]], float(line[i]))
 
 d['sLap'] = d['sLap'] - d['sLap'][0]  # correct distance data
+# d['LapDistPct'] = d['LapDistPct'] - d['LapDistPct'][0]
+# d['LapDistPct'] = d['LapDistPct'] / d['LapDistPct'][-1] *100
 
 # do some calculations for baseline data
 d['dt'] = np.diff(d['tLap'])
 d['ds'] = np.diff(d['sLap'])
+d['dLapDistPct'] = np.diff(d['LapDistPct'])
 d = calcFuel(d)
 d = calcLapTime(d)
 
@@ -101,9 +105,6 @@ plt.legend()
 plt.show(block=False)
 
 # cut lap at first apex
-sLapCut = d['sLap'][NApex[0]]
-tLapCut = d['tLap'][NApex[0]]
-
 # create new data dict for cut lap --> c
 temp = copy.deepcopy(d)
 c = {}
@@ -111,11 +112,14 @@ keys = list(temp.keys())
 
 for i in range(0,len(temp)):
     if keys[i] == 'tLap':
-        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - tLapCut
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - d['tLap'][NApex[0]]
         c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['dt'][-1])
     elif keys[i] == 'sLap':
-        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - sLapCut
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - d['sLap'][NApex[0]]
         c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['ds'][-1])
+    elif keys[i] == 'LapDistPct':
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - d['LapDistPct'][NApex[0]]
+        c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['dLapDistPct'][-1])
     else:
         c[keys[i]] = temp[keys[i]][NApex[0]:-1]
         c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]])
@@ -123,6 +127,7 @@ for i in range(0,len(temp)):
 # re-do calculations for cut lap
 c['dt'] = np.diff(c['tLap'])
 c['ds'] = np.diff(c['sLap'])
+c['dLapDistPct'] = np.diff(c['LapDistPct'])
 c = calcFuel(c)
 c = calcLapTime(c)
 NApex = NApex[1:len(NApex)] - NApex[0]
@@ -175,7 +180,7 @@ plt.grid()
 plt.legend()
 plt.show(block=False)
 
-#  for each lifting zone calculate various ratios of lifting
+# for each lifting zone calculate various ratios of lifting
 rLift = np.linspace(0, 1, 50)
 
 VFuelRLift = np.zeros((len(NLiftEarliest), len(rLift)))
@@ -283,6 +288,12 @@ plt.grid()
 plt.show(block=False)
 
 # get LapDistPct
+LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+for i in range(0, len(NBrake)):  # lift zones
+    x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
+    y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
+    for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
+        LiftPointsVsFuelCons['LapDistPct'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
 
 # transform back to original lap
 
