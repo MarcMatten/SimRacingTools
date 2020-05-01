@@ -64,7 +64,7 @@ header = ["tLap","vCar","gLat","gLong","rThrottle","rBrake","QFuel","rhoFuel","s
 # declare baseline data dict and fill it from CSV
 d = {}
 
-for i in range(0,len(header)):
+for i in range(0, len(header)):
     d[header[i]] = np.array([])
 
 with open(filename) as csv_file:
@@ -106,32 +106,32 @@ tLapCut = d['tLap'][NApex[0]]
 
 # create new data dict for cut lap --> c
 temp = copy.deepcopy(d)
-d = {}
+c = {}
 keys = list(temp.keys())
 
 for i in range(0,len(temp)):
     if keys[i] == 'tLap':
-        d[keys[i]] = temp[keys[i]][NApex[0]:-1] - tLapCut
-        d[keys[i]] = np.append(d[keys[i]], temp[keys[i]][0:NApex[0]] + d[keys[i]][-1] + temp['dt'][-1])
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - tLapCut
+        c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['dt'][-1])
     elif keys[i] == 'sLap':
-        d[keys[i]] = temp[keys[i]][NApex[0]:-1] - sLapCut
-        d[keys[i]] = np.append(d[keys[i]], temp[keys[i]][0:NApex[0]] + d[keys[i]][-1] + temp['ds'][-1])
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1] - sLapCut
+        c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['ds'][-1])
     else:
-        d[keys[i]] = temp[keys[i]][NApex[0]:-1]
-        d[keys[i]] = np.append(d[keys[i]], temp[keys[i]][0:NApex[0]])
+        c[keys[i]] = temp[keys[i]][NApex[0]:-1]
+        c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]])
 
 # re-do calculations for cut lap
-d['dt'] = np.diff(d['tLap'])
-d['ds'] = np.diff(d['sLap'])
-d = calcFuel(d)
-d = calcLapTime(d)
+c['dt'] = np.diff(c['tLap'])
+c['ds'] = np.diff(c['sLap'])
+c = calcFuel(c)
+c = calcLapTime(c)
 NApex = NApex[1:len(NApex)] - NApex[0]
-NApex = np.append(NApex, len(d['tLap'])-1)
-d['rBrake'][0] = 0.1  # fudging around to find the first brake point
+NApex = np.append(NApex, len(c['tLap'])-1)
+c['rBrake'][0] = 0.1  # fudging around to find the first brake point
 
 # find potential lift point (from full throttle to braking)
-NWOT = scipy.signal.find_peaks(d['rThrottle'], height=100, plateau_size=80)
-NBrake = scipy.signal.find_peaks(100-d['rBrake'], height=100, plateau_size=40)
+NWOT = scipy.signal.find_peaks(c['rThrottle'], height=100, plateau_size=80)
+NBrake = scipy.signal.find_peaks(100-c['rBrake'], height=100, plateau_size=40)
 
 if not len(NWOT[1]) == len(NBrake[1]):
     print('Error! Number of brake application and full throttle point don nit match!')
@@ -142,10 +142,10 @@ NWOT = NWOT[1]['left_edges']
 NBrake = NBrake[1]['right_edges']
 
 plt.figure()
-plt.plot(d['sLap'], d['vCar'], label='Speed - Push Lap')
-plt.scatter(d['sLap'][NWOT], d['vCar'][NWOT], label='Full Throttle Points')
-plt.scatter(d['sLap'][NBrake], d['vCar'][NBrake], label='Brake Points')
-plt.scatter(d['sLap'][NApex], d['vCar'][NApex], label='Apex Points')
+plt.plot(c['sLap'], c['vCar'], label='Speed - Push Lap')
+plt.scatter(c['sLap'][NWOT], c['vCar'][NWOT], label='Full Throttle Points')
+plt.scatter(c['sLap'][NBrake], c['vCar'][NBrake], label='Brake Points')
+plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
 plt.grid()
 plt.legend()
 plt.title('Sections')
@@ -154,23 +154,23 @@ plt.ylabel('vCar [m/s]')
 plt.show(block=False)
 
 print('\nPush Lap:')
-print('LapTime :', np.round(d['tLap'][-1], 3))
-print('VFuel :', np.round(d['VFuel'][-1], 3))
+print('LapTime :', np.round(c['tLap'][-1], 3))
+print('VFuel :', np.round(c['VFuel'][-1], 3))
 
 # Find earliest lift points. Assumption: arriving at apex with apex speed but no brake application
 NLiftEarliest = np.array([], dtype='int32')
-d_temp = copy.deepcopy(d)
+c_temp = copy.deepcopy(c)
 for i in range(0, len(NWOT)):
-    d_temp, n = stepBwds(d_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])))
+    c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])))
     NLiftEarliest = np.append(NLiftEarliest, n)
 
 plt.figure()
 plt.title('Earliest Lift Points')
 plt.xlabel('sLap [m]')
 plt.ylabel('vCar [m/s]')
-plt.plot(d['sLap'], d['vCar'], label='Speed')
-plt.plot(d_temp['sLap'], d_temp['vCar'], label='Maximum Lifting')
-plt.scatter(d_temp['sLap'][NLiftEarliest], d_temp['vCar'][NLiftEarliest], label='Earliest Lift Point')
+plt.plot(c['sLap'], c['vCar'], label='Speed')
+plt.plot(c_temp['sLap'], c_temp['vCar'], label='Maximum Lifting')
+plt.scatter(c_temp['sLap'][NLiftEarliest], c_temp['vCar'][NLiftEarliest], label='Earliest Lift Point')
 plt.grid()
 plt.legend()
 plt.show(block=False)
@@ -183,11 +183,11 @@ tLapRLift = np.zeros((len(NLiftEarliest), len(rLift)))
 
 for i in range(0, len(NLiftEarliest)):
     for k in range(1, len(rLift)):
-        tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], copy.deepcopy(d), [NLiftEarliest[i]], [NBrake[i]], None, False)
+        tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False)
 
 # get fuel consumption and lap time differences compared to original lap
-tLapRLift = tLapRLift - d['tLap'][-1]
-VFuelRLift = VFuelRLift - d['VFuel'][-1]
+tLapRLift = tLapRLift - c['tLap'][-1]
+VFuelRLift = VFuelRLift - c['VFuel'][-1]
 
 # remove outliners
 VFuelRLift[tLapRLift == 0] = nan
@@ -232,11 +232,11 @@ for i in range(0, len(NLiftEarliest)):
         plt.show(block=False)
 
 # maximum lift
-tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), d, NLiftEarliest, NBrake, None, False)
+tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), c, NLiftEarliest, NBrake, None, False)
 
 # optimisation for 100 steps between maximum lift and push
 VFuelTGT = np.max([3.1, VFuelMaxSave])
-VFuelTGT = np.linspace(VFuelMaxSave, d['VFuel'][-1], 100)
+VFuelTGT = np.linspace(VFuelMaxSave, c['VFuel'][-1], 100)
 
 print('\nMaximum Lift:')
 print('LapTime :', np.round(tLapMaxSave, 3))
@@ -251,7 +251,7 @@ fun = []
 
 for i in range(0, len(VFuelTGT)):  # optimisation loop
 
-    VFuelConsTGT = VFuelTGT[i] - d['VFuel'][-1]
+    VFuelConsTGT = VFuelTGT[i] - c['VFuel'][-1]
 
     FuelConstraint = {'type': 'eq', 'fun': calcFuelConstraint, 'args': (VFuelPolyFit, VFuelConsTGT)}
 
@@ -266,7 +266,7 @@ for i in range(0, len(VFuelTGT)):  # optimisation loop
 plt.figure()
 plt.title('tLap vs VFuelTGT')
 plt.xlabel('VFuelTGT [l]')
-plt.ylabel('tLap [s]')
+plt.ylabel('dtLap [s]')
 plt.plot(LiftPointsVsFuelCons['VFuelTGT'], fun)
 plt.grid()
 plt.show(block=False)
