@@ -14,6 +14,7 @@ def costFcn(rLift, *args):
 
     C = calcFuel(C)
     C = calcLapTime(C)
+
     if optim:
         return C['tLap'][-1] + abs(VFuelTgt - C['VFuel'][-1])*1000
     else:
@@ -23,6 +24,8 @@ def stepFwds(x, n):
 
     temp = copy.deepcopy(x)
 
+    i=0
+
     while temp['vCar'][n] < temp['vCar'][n+1]:
         vCar = temp['vCar'][n]
         gLong = getGLong(vCar, temp['aTrackIncline'][n])
@@ -31,6 +34,7 @@ def stepFwds(x, n):
         temp['vCar'][n+1] = temp['vCar'][n] + gLong * temp['dt'][n]
         temp['QFuel'][n] = 0.61
         n=n+1
+        i+=1
 
     return temp
 
