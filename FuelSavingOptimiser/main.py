@@ -5,6 +5,7 @@ import scipy.optimize
 import matplotlib.pyplot as plt
 import copy
 from costFcn import costFcn
+import json
 
 
 def calcFuel(x):
@@ -52,6 +53,21 @@ def calcFuelConstraint(rLift, *args):
     for i in range(0,len(rLift)):
         dVFuel = dVFuel + poly6(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
     return dVFuel - VFuelConsTGT
+
+def saveJson(x):
+    filepath ='FuelTGTLiftPoints.json'
+
+    variables = list(x.keys())
+
+    data = {}
+
+    for i in range(0, len(variables)):
+        data[variables[i]] = x[variables[i]].transpose().tolist()
+
+    with open(filepath, 'w') as outfile:
+        json.dump(data, outfile, indent=4, sort_keys=True)
+
+    print('Saved data ' + filepath)
 
 
 BPlot = False
@@ -109,8 +125,9 @@ plt.show(block=False)
 temp = copy.deepcopy(d)
 c = {}
 keys = list(temp.keys())
+NCut = len(temp[keys[i]][NApex[0]:-1])
 
-for i in range(0,len(temp)):
+for i in range(0, len(temp)):
     if keys[i] == 'tLap':
         c[keys[i]] = temp[keys[i]][NApex[0]:-1] - d['tLap'][NApex[0]]
         c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['dt'][-1])
@@ -131,7 +148,7 @@ c['dLapDistPct'] = np.diff(c['LapDistPct'])
 c = calcFuel(c)
 c = calcLapTime(c)
 NApex = NApex[1:len(NApex)] - NApex[0]
-NApex = np.append(NApex, len(c['tLap'])-1)
+NApex = np.append(NApex, len(c['tLap'])-1) # fake apex for last index
 c['rBrake'][0] = 0.1  # fudging around to find the first brake point
 
 # find potential lift point (from full throttle to braking)
@@ -151,6 +168,7 @@ plt.plot(c['sLap'], c['vCar'], label='Speed - Push Lap')
 plt.scatter(c['sLap'][NWOT], c['vCar'][NWOT], label='Full Throttle Points')
 plt.scatter(c['sLap'][NBrake], c['vCar'][NBrake], label='Brake Points')
 plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
+
 plt.grid()
 plt.legend()
 plt.title('Sections')
@@ -265,8 +283,10 @@ for i in range(0, len(VFuelTGT)):  # optimisation loop
     result.append(temp_result)
     fun.append(temp_result['fun'])
 
-    LiftPointsVsFuelCons['VFuelTGT'][i] = VFuelTGT[i]
     LiftPointsVsFuelCons['LiftPoints'][i, :] = result[i]['x']
+
+
+LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
 
 plt.figure()
 plt.title('tLap vs VFuelTGT')
@@ -290,13 +310,69 @@ plt.show(block=False)
 # get LapDistPct
 LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
 for i in range(0, len(NBrake)):  # lift zones
+    # flip because x data must be monotonically increasing
     x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
     y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
     for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
         LiftPointsVsFuelCons['LapDistPct'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
 
 # transform back to original lap
+temp = copy.deepcopy(c)
+r = {}
+keys = list(temp.keys())
+
+for i in range(0, len(temp)):
+    if keys[i] == 'tLap':
+        r[keys[i]] = temp[keys[i]][NCut:-1] - d['tLap'][NApex[0]]
+        r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['dt'][-1])
+    elif keys[i] == 'sLap':
+        r[keys[i]] = temp[keys[i]][NCut:-1] - d['sLap'][NApex[0]]
+        r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['ds'][-1])
+    elif keys[i] == 'LapDistPct':
+        r[keys[i]] = temp[keys[i]][NCut:-1] - d['LapDistPct'][NApex[0]]
+        r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['dLapDistPct'][-1])
+    else:
+        r[keys[i]] = temp[keys[i]][NCut:-1]
+        r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut])
+
+# re-do calculations for cut lap
+r['dt'] = np.diff(r['tLap'])
+r['ds'] = np.diff(r['sLap'])
+r['dLapDistPct'] = np.diff(r['LapDistPct'])
+r = calcFuel(r)
+r = calcLapTime(r)
+
+# NApex = NApex[0:-1] + len(d['vCar']) - NCut - 1
+NApex = NApex + len(d['vCar']) - NCut - 1
+NApex[NApex > len(d['vCar'])] = NApex[NApex > len(d['vCar'])] - len(d['vCar']) + 1
+NApex = np.sort(NApex)
+
+NBrake = NBrake + len(d['vCar']) - NCut - 1
+NBrake[NBrake > len(d['vCar'])] = NBrake[NBrake > len(d['vCar'])] - len(d['vCar']) + 1
+NBrake = np.sort(NBrake)
+
+NLiftEarliest = NLiftEarliest + len(d['vCar']) - NCut - 1
+NLiftEarliest[NLiftEarliest > len(d['vCar'])] = NLiftEarliest[NLiftEarliest > len(d['vCar'])] - len(d['vCar']) + 1
+NLiftEarliest = np.sort(NLiftEarliest)
+
+NWOT = NWOT + len(d['vCar']) - NCut - 1
+NWOT[NWOT > len(d['vCar'])] = NWOT[NWOT > len(d['vCar'])] - len(d['vCar']) + 1
+NWOT = np.sort(NWOT)
+
+plt.figure()
+plt.plot(d['LapDistPct'], d['vCar'], label='original')
+plt.plot(d['LapDistPct'], d['vCar'], label='new', linestyle='dashed')
+plt.scatter(d['LapDistPct'][NApex], d['vCar'][NApex], label='NApex')
+plt.scatter(d['LapDistPct'][NBrake], d['vCar'][NBrake], label='NBrake')
+plt.scatter(d['LapDistPct'][NLiftEarliest], d['vCar'][NLiftEarliest], label='NLiftEarliest')
+plt.scatter(d['LapDistPct'][NWOT], d['vCar'][NWOT], label='NWOT')
+plt.legend()
+plt.grid()
+plt.show(block=False)
+
+LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] + 100 - c['LapDistPct'][NCut]
 
 # export data
+saveJson(LiftPointsVsFuelCons)
 
 print('Done')
