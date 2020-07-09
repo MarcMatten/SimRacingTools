@@ -1,30 +1,54 @@
-import numpy as np
-import scipy.signal
-import scipy.optimize
-import matplotlib.pyplot as plt
 import copy
-from SimRacingTools.FuelSavingOptimiser.costFcn import costFcn
 import json
-from functionalities.libs import importIBT
+import os
+import time
 import tkinter as tk
 from tkinter import filedialog
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.optimize
+import scipy.signal
+
+from functionalities.libs import filters, maths, importIBT
 from libs.Car import Car
-import time
-import os
 
-rhoFuel = 0.75
+rhoFuel = 0.75  # TODO can this be obtained from IBT file?
+nan = float('nan')
 
 
-def polyVal(x, *args):
-    if isinstance(args[0], np.ndarray):
-        c = args[0]
+def costFcn(rLift, car, *args):
+    C = args[0]  # data struct
+    NLiftEarliest = args[1]  # index of ealiest lift points
+    NBrake = args[2]  # index of braking points
+    VFuelTgt = args[3]  # fuel target for optimistion mode
+    optim = args[4]  # optimisation mode -> calc error?
+    LiftGear = args[5]
+    for i in range(0, len(NLiftEarliest)):
+        C = stepFwds(C, NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i])), LiftGear[i], car)
+
+    C = calcFuel(C)
+    C = calcLapTime(C)
+
+    if optim:
+        return C['tLap'][-1] + abs(VFuelTgt - C['VFuel'][-1]) * 1000
     else:
-        c = args
+        return C['tLap'][-1], C['VFuel'][-1], C
 
-    temp = 0
 
-    for i in range(0, len(c)):
-        temp += c[i] * np.power(x, i)
+def stepFwds(x, n, LiftGear, car):
+    temp = copy.deepcopy(x)
+    i = 0
+
+    while temp['vCar'][n] < temp['vCar'][n + 1]:
+        vCar = temp['vCar'][n]
+        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
+        ds = temp['ds'][n]
+        temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
+        temp['vCar'][n + 1] = temp['vCar'][n] + gLong * temp['dt'][n]
+        temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
+        n = n + 1
+        i += 1
 
     return temp
 
@@ -47,34 +71,22 @@ def stepBwds(x, i, LiftGear, car):
 
     while temp['vCar'][n] <= x['vCar'][n-1]:
         vCar = temp['vCar'][n]
-        # gLong = getGLong(vCar, temp['aTrackIncline'][n], LiftGear)
-        gLong = polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
+        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
         ds = temp['ds'][n]
-        temp['dt'][n] = -vCar/gLong - np.sqrt( np.square(vCar / gLong) + 2*ds/gLong )
-        temp['vCar'][n-1] = temp['vCar'][n] - gLong * temp['dt'][n]
+        temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
+        temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
         # temp['QFuel'][n] = 0.58
-        temp['QFuel'][n] = polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
-        n = n-1
+        temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
+        n = n - 1
 
     return temp, int(n)
-
-
-def getGLong(v, aTrackIncline, LiftGear):
-    if LiftGear == 6:
-        return -0.0010998*np.square(v) + 0.057576 * v - 2.0634 - np.sin(aTrackIncline/180*np.pi)
-    else:  # 4
-        return -0.0007912*np.square(v) + 0.0008683 * v - 0.41181 - np.sin(aTrackIncline/180*np.pi)
-
-
-def poly6(x, a, b, c, d, e, f):
-    return a + b * x + c * np.power(x, 2) + d * np.power(x, 3) + e * np.power(x, 4) + f * np.power(x, 5)
 
 
 def objectiveLapTime(rLift, *args):
     tLapPolyFit = args[0]
     dt = 0
     for i in range(0, len(rLift)):
-        dt = dt + poly6(rLift[i], tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5])
+        dt = dt + maths.poly6(rLift[i], tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5])
     return dt
 
 
@@ -83,11 +95,11 @@ def calcFuelConstraint(rLift, *args):
     VFuelConsTGT = args[1]
     dVFuel = 0
     for i in range(0, len(rLift)):
-        dVFuel = dVFuel + poly6(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
+        dVFuel = dVFuel + maths.poly6(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
     return dVFuel - VFuelConsTGT
 
 
-def saveJson(x, path):
+def saveJson(x, path):  # TODO: outsource to separate JSON library
     filepath = filedialog.asksaveasfilename(initialdir=path, title="Where to save results?",
                                             filetypes=[("JSON files", "*.json"), ("all files", "*.*")])
     # filepath = 'FuelTGTLiftPoints.json'
@@ -105,22 +117,7 @@ def saveJson(x, path):
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
 
 
-def moving_average(a, n):
-    temp = a[-n:]
-    temp = np.append(temp, a)
-    temp = np.append(temp, a[0:n])
-    r = np.zeros(np.size(temp))
-    for i in range(0, len(temp)):
-        if i < n:
-            r[i] = np.mean(temp[0:i+n])
-        elif len(temp) < i + n:
-            r[i] = np.mean(temp[i-n:])
-        else:
-            r[i] = np.mean(temp[i-n:n+i])
-    return r[n:-n]
-
-
-def createTrack(x):
+def createTrack(x):  # TODO: outsource to separate library
     dx = np.array(0)
     dy = np.array(0)
 
@@ -153,15 +150,13 @@ def createTrack(x):
     return x, y
 
 
-def calc(dirPath):
-
+def optimise(dirPath):
     BPlot = True
-    nan = float('nan')
 
     root = tk.Tk()
     root.withdraw()
 
-    carPath = filedialog.askopenfilename(initialdir=dirPath+"/car", title="Select car JSON file",
+    carPath = filedialog.askopenfilename(initialdir=dirPath + "/car", title="Select car JSON file",
                                          filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
     car.loadJson(carPath)
@@ -183,12 +178,12 @@ def calc(dirPath):
     d = importIBT.importIBT(MyIbtPath, 'f')
 
     # create results directory
-    resultsDirPath = dirPath + "/FuelSaving/" + car.name
-    os.mkdir(resultsDirPath)
+    resultsDirPath = dirPath + "/FuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    os.mkdir(resultsDirPath)  # TODO: doesn't work if directory already exists
 
     # calculate aTrackIncline smooth(atan( derivative('Alt' [m]) / derivative('Lap Distance' [m]) ), 1.5)
-    d['aTrackIncline'] = np.arctan(np.gradient(d['GPSAltitude'])/np.gradient(d['sLap']))
-    d['aTrackIncline2'] = np.arctan(np.gradient(moving_average(d['GPSAltitude'], 25))/np.gradient(d['sLap']))
+    d['aTrackIncline'] = np.arctan(np.gradient(d['GPSAltitude']) / np.gradient(d['sLap']))
+    d['aTrackIncline2'] = np.arctan(np.gradient(filters.movingAverage(d['GPSAltitude'], 25)) / np.gradient(d['sLap']))
 
     d['sLap'] = d['sLap'] - d['sLap'][0]  # correct distance data
 
@@ -211,7 +206,7 @@ def calc(dirPath):
                 NApex = np.delete(NApex, i+1)
 
     plt.ioff()
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.plot(d['sLap'], d['vCar'], 'k', label='Speed')
     plt.grid()
     plt.title('Apex Points')
@@ -265,7 +260,7 @@ def calc(dirPath):
     NBrake = NBrake[1]['right_edges']
     LiftGear = c['Gear'][NBrake]
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.plot(c['sLap'], c['vCar'], label='Speed - Push Lap')
     plt.scatter(c['sLap'][NWOT], c['vCar'][NWOT], label='Full Throttle Points')
     plt.scatter(c['sLap'][NBrake], c['vCar'][NBrake], label='Brake Points')
@@ -289,7 +284,7 @@ def calc(dirPath):
         c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])), LiftGear[i], car)
         NLiftEarliest = np.append(NLiftEarliest, n)
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.title('Earliest Lift Points')
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
@@ -334,27 +329,27 @@ def calc(dirPath):
         f = yFuel[~np.isnan(yTime)]
         t = yTime[~np.isnan(yTime)]
 
-        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(poly6, x, t)
-        VFuelPolyFit[i, :],  temp = scipy.optimize.curve_fit(poly6, x, f)
+        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.poly6, x, t)
+        VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.poly6, x, f)
 
-        if BPlot:
-            plt.figure()
-            plt.title('Lap Time Loss - Lift Zone ' + str(i+1))
+        if BPlot:  # TODO: save these plots in a subdirectory
+            plt.figure()  # TODO: make plot nice
+            plt.title('Lap Time Loss - Lift Zone ' + str(i + 1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
             plt.scatter(rLift, tLapRLift[i, :])
-            plt.plot(rLiftPlot, poly6(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
+            plt.plot(rLiftPlot, maths.poly6(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i+1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
 
-            plt.figure()
-            plt.title('Fuel Save - Lift Zone ' + str(i+1))
+            plt.figure()  # TODO: make plot nice
+            plt.title('Fuel Save - Lift Zone ' + str(i + 1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
-            plt.plot(rLiftPlot, poly6(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
+            plt.plot(rLiftPlot, maths.poly6(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i+1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
 
     # maximum lift
     tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), car, c, NLiftEarliest, NBrake, None, False, LiftGear)
@@ -379,17 +374,19 @@ def calc(dirPath):
 
         FuelConstraint = {'type': 'eq', 'fun': calcFuelConstraint, 'args': (VFuelPolyFit, VFuelConsTGT)}
 
-        temp_result = scipy.optimize.minimize(objectiveLapTime, [0.0]*6, args=(tLapPolyFit, VFuelPolyFit), method='SLSQP', bounds=bounds, constraints=FuelConstraint, options={'maxiter': 10000, 'ftol': 1e-09, 'iprint': 1, 'disp': False})
+        # actual optimisation
+        temp_result = scipy.optimize.minimize(objectiveLapTime, np.zeros(6), args=(tLapPolyFit, VFuelPolyFit), method='SLSQP', bounds=bounds, constraints=FuelConstraint,
+                                              options={'maxiter': 10000, 'ftol': 1e-09, 'iprint': 1, 'disp': False})
 
         result.append(temp_result)
-        fun.append(temp_result['fun']+0.029)
+        fun.append(temp_result['fun'] + 0.029)
 
         LiftPointsVsFuelCons['LiftPoints'][i, :] = result[i]['x']
 
 
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.title('Detla tLap vs VFuel')
     plt.xlabel('VFuel [l]')
     plt.ylabel('Delta tLap [s]')
@@ -398,7 +395,7 @@ def calc(dirPath):
     plt.legend()
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.title('rLift vs VFuelTGT')
     plt.xlabel('VFuelTGT [l]')
     plt.ylabel('rLift [-]')
@@ -434,7 +431,7 @@ def calc(dirPath):
     NWOT[NWOT > len(d['vCar'])] = NWOT[NWOT > len(d['vCar'])] - len(d['vCar']) + 1
     NWOT = np.sort(NWOT)
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.plot(d['LapDistPct'], d['vCar'], label='original')
     plt.plot(d['LapDistPct'], d['vCar'], label='new', linestyle='dashed')
     plt.scatter(d['LapDistPct'][NApex], d['vCar'][NApex], label='NApex')
@@ -445,9 +442,7 @@ def calc(dirPath):
     plt.grid()
     plt.savefig(resultsDirPath + '/resultsCheck.png', dpi=300, orientation='landscape', progressive=True)
 
-
-
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.plot(d['x'], d['y'], label='Track')
     plt.scatter(d['x'][NApex], d['y'][NApex], label='NApex')
     plt.scatter(d['x'][NBrake], d['y'][NBrake], label='NBrake')

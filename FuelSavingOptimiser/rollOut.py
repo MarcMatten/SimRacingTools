@@ -1,27 +1,15 @@
-import numpy as np
-import scipy.signal
-import scipy.optimize
-import matplotlib.pyplot as plt
-from functionalities.libs import importIBT
-from libs.Car import Car
+import os
+import time
 import tkinter as tk
 from tkinter import filedialog
-import time
-import os
 
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.optimize
+import scipy.signal
 
-def polyVal(x, *args):
-    if isinstance(args[0], np.ndarray):
-        c = args[0]
-    else:
-        c = args
-
-    temp = 0
-
-    for i in range(0, len(c)):
-        temp += c[i] * np.power(x, i)
-
-    return temp
+from functionalities.libs import maths, importIBT
+from libs.Car import Car
 
 
 def getRollOutCurve(dirPath):
@@ -40,8 +28,8 @@ def getRollOutCurve(dirPath):
     d = importIBT.importIBT(path)
 
     # create results directory
-    resultsDirPath = dirPath + "/FuelSaving/" + car.name
-    os.mkdir(resultsDirPath)
+    resultsDirPath = dirPath + "/FuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    os.mkdir(resultsDirPath)  # TODO: doesn't work if directory already exists
 
     d['BStraightLine'] = np.logical_and(np.abs(d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03)
     d['BStraightLine'] = np.logical_and(d['BStraightLine'], d['vCar'] > 10)
@@ -49,7 +37,7 @@ def getRollOutCurve(dirPath):
     d['BCoasting'] = np.logical_and(d['BCoasting'], d['BStraightLine'])
 
     plt.ioff()
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.grid()
     plt.xlabel('vCar [m/s]')
     plt.ylabel('gLong [m/s²]')
@@ -59,26 +47,24 @@ def getRollOutCurve(dirPath):
     d['BGear'] = list()
     gLongPolyFit = list()
     QFuelPolyFit = list()
-
+    vCar = np.linspace(0, np.max(d['vCar']) + 10, 100)
     NGear = np.linspace(0, np.max(d['Gear']), np.max(d['Gear'])+1)
 
     for i in range(0, np.max(d['Gear'])+1):
         d['BGear'].append(np.logical_and(d['BCoasting'], d['Gear'] == NGear[i]))
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
+        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
         gLongPolyFit.append(PolyFitTemp)
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
+        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
         QFuelPolyFit.append(PolyFitTemp)
 
         plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]])
-
-        vCar = np.linspace(0, np.max(d['vCar'])+10, 100)
-        plt.plot(vCar, polyVal(vCar, gLongPolyFit[i]))
+        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i]))
 
     plt.savefig(resultsDirPath + '/roll_out_curve.png', dpi=300, orientation='landscape', progressive=True)
 
-    plt.figure()
+    plt.figure()  # TODO: make plot nice
     plt.grid()
     plt.xlabel('vCar [m/s]')
     plt.ylabel('QFuel [g/s]')
@@ -87,7 +73,7 @@ def getRollOutCurve(dirPath):
 
     for i in range(0, np.max(d['Gear']) + 1):
         plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
-        plt.plot(vCar, polyVal(vCar, QFuelPolyFit[i]))
+        plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]))
 
     plt.savefig(resultsDirPath + '/coastint_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
 
