@@ -2,9 +2,12 @@ import numpy as np
 import scipy.signal
 import scipy.optimize
 import matplotlib.pyplot as plt
-from importIBT import importIBT
+from functionalities.libs import importIBT
+from libs.Car import Car
 import tkinter as tk
 from tkinter import filedialog
+import time
+import os
 
 
 def polyVal(x, *args):
@@ -21,71 +24,100 @@ def polyVal(x, *args):
     return temp
 
 
-def getRollOutCurve(path):
-    # MyChannelMap = {'Speed': ['vCar', 1],  # m/s
-    #                 'LapCurrentLapTime': ['tLap', 1],  # s
-    #                 'LatAccel': ['gLat', 1],  # m/s²
-    #                 'LongAccel': ['gLong', 1],  # m/s²
-    #                 'ThrottleRaw': ['rThrottle', 1],  # 1
-    #                 'BrakeRaw': ['rBrake', 1],  # 1
-    #                 'FuelUsePerHour': ['QFuel', 1 / 3.6],  # l/h --> g/s
-    #                 'LapDist': ['sLap', 1],  # m
-    #                 'Alt': ['GPSAltitude', 1]  # m,
-    #                 }
+def getRollOutCurve(dirPath):
+    root = tk.Tk()
+    root.withdraw()
+    path = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+                                           filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
-    d = importIBT(path)
+    carPath = filedialog.askopenfilename(initialdir=dirPath+"/car", title="Select car JSON file",
+                                           filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+    car = Car('CarName')
+    car.loadJson(carPath)
+
+    print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting roll-out curve calculation for: ' + car.name)
+
+    d = importIBT.importIBT(path)
+
+    # create results directory
+    resultsDirPath = dirPath + "/FuelSaving/" + car.name
+    os.mkdir(resultsDirPath)
 
     d['BStraightLine'] = np.logical_and(np.abs(d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03)
     d['BStraightLine'] = np.logical_and(d['BStraightLine'], d['vCar'] > 10)
     d['BCoasting'] = np.logical_and(d['rThrottle'] < 0.01, d['rBrake'] < 0.01)
     d['BCoasting'] = np.logical_and(d['BCoasting'], d['BStraightLine'])
 
+    plt.ioff()
     plt.figure()
+    # plt.close()
     plt.grid()
     plt.xlabel('vCar [m/s]')
     plt.ylabel('gLong [m/s²]')
     # plt.legend()
-    plt.show(block=False)
-    plt.title('Title')
-    # plt.xlim(0, np.max(d['vCar'][d['BShiftRPM']]) + 5)
-    # plt.ylim(0, np.max(d['gLong'][d['BShiftRPM']]) + 1)
+    # plt.show(block=False)
+    plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
+    plt.ylim(np.min(d['gLong'][d['BCoasting']]) -1, 0)
 
     d['BGear'] = list()
     gLongPolyFit = list()
     QFuelPolyFit = list()
 
-    for i in range(0, np.max(d['Gear'])+1):
-        NGear = i
-        d['BGear'].append(np.logical_and(d['BCoasting'], d['Gear'] == NGear))
+    NGear = np.linspace(0, np.max(d['Gear']), np.max(d['Gear'])+1)
 
-        # PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0, 0])
-        PolyFitTemp, temp = scipy.optimize.curve_fit(np.polyval, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0, 0])
+    for i in range(0, np.max(d['Gear'])+1):
+        d['BGear'].append(np.logical_and(d['BCoasting'], d['Gear'] == NGear[i]))
+
+        PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
+        # PolyFitTemp, temp = scipy.optimize.curve_fit(np.polyval, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0, 0])
         gLongPolyFit.append(PolyFitTemp)
 
-        # PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0, 0])
-        PolyFitTemp, temp = scipy.optimize.curve_fit(np.polyval, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0, 0])
+        PolyFitTemp, temp = scipy.optimize.curve_fit(polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
+        # PolyFitTemp, temp = scipy.optimize.curve_fit(np.polyval, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0, 0])
         QFuelPolyFit.append(PolyFitTemp)
 
-        # plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]])
-        plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
+        plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]])
+        # plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
 
         vCar = np.linspace(0, np.max(d['vCar'])+10, 100)
         # plt.plot(vCar, poly3(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]))
-        # plt.plot(vCar, polyVal(vCar, gLongPolyFit[i]))
+        plt.plot(vCar, polyVal(vCar, gLongPolyFit[i]))
         # plt.plot(vCar, poly3(vCar, QFuelPolyFit[i][0], QFuelPolyFit[i][1], QFuelPolyFit[i][2], QFuelPolyFit[i][3]))
         # plt.plot(vCar, polyVal(vCar, QFuelPolyFit[i]))
-        plt.plot(vCar, np.polyval(QFuelPolyFit[i]), vCar)
+        # plt.plot(vCar, np.polyval(QFuelPolyFit[i]), vCar)
 
-    return gLongPolyFit
+    plt.savefig(resultsDirPath + '/roll_out_curve.png', dpi=300, orientation='landscape', progressive=True)
+
+    plt.figure()
+    # plt.close()
+    plt.grid()
+    plt.xlabel('vCar [m/s]')
+    plt.ylabel('QFuel [g/s]')
+    # plt.legend()
+    # plt.show(block=False)
+    plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
+    plt.ylim(0, np.max(d['QFuel'][d['BCoasting']]) + 10)
+
+    for i in range(0, np.max(d['Gear']) + 1):
+        plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
+        plt.plot(vCar, polyVal(vCar, QFuelPolyFit[i]))
+
+    plt.savefig(resultsDirPath + '/coastint_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
+
+    # save so car file
+    car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear)
+    car.saveJson(carPath)
+
+    print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')
 
 
 # MyIbtPath = 'C:/Users/Marc/Documents/Projekte/SimRacingTools/FuelSavingOptimiser/fordgt2017_indianapolis oval 2020-05-11 19-43-16.ibt'
-root = tk.Tk()
-root.withdraw()
-MyIbtPath = filedialog.askopenfilename(initialdir="C:/Users/Marc/Documents/Projekte/SimRacingTools/FuelSavingOptimiser", title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
-
-p = getRollOutCurve(MyIbtPath)
-
-print('Roll Out Curves: ', p)
-
-print('Done')
+# root = tk.Tk()
+# root.withdraw()
+# MyIbtPath = filedialog.askopenfilename(initialdir="C:/Users/Marc/Documents/Projekte/SimRacingTools/FuelSavingOptimiser", title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+#
+# p = getRollOutCurve(MyIbtPath)
+#
+# print('Roll Out Curves: ', p)
+#
+# print('Done')

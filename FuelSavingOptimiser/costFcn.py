@@ -1,10 +1,25 @@
 import numpy as np
 import copy
+from libs.Car import Car
 
 temp = None
 rhoFuel = 0.75
 
-def costFcn(rLift, *args):
+
+def polyVal(x, *args):
+    if isinstance(args[0], np.ndarray):
+        c = args[0]
+    else:
+        c = args
+
+    temp = 0
+
+    for i in range(0, len(c)):
+        temp += c[i] * np.power(x, i)
+
+    return temp
+
+def costFcn(rLift, car,  *args):
     C = args[0]  # data struct
     NLiftEarliest = args[1]  # index of ealiest lift points
     NBrake = args[2]  # index of braking points
@@ -12,7 +27,7 @@ def costFcn(rLift, *args):
     optim = args[4]  # optimisation mode -> calc error?
     LiftGear = args[5]
     for i in range(0, len(NLiftEarliest)):
-        C = stepFwds(C, NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i])), LiftGear[i])
+        C = stepFwds(C, NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i])), LiftGear[i], car)
 
     C = calcFuel(C)
     C = calcLapTime(C)
@@ -23,17 +38,19 @@ def costFcn(rLift, *args):
         return C['tLap'][-1], C['VFuel'][-1], C
 
 
-def stepFwds(x, n, LiftGear):
+def stepFwds(x, n, LiftGear, car):
     temp = copy.deepcopy(x)
     i = 0
 
     while temp['vCar'][n] < temp['vCar'][n+1]:
         vCar = temp['vCar'][n]
-        gLong = getGLong(vCar, temp['aTrackIncline'][n], LiftGear)
+        # gLong = getGLong(vCar, temp['aTrackIncline'][n], LiftGear)
+        gLong = polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar/gLong - np.sqrt(np.square(vCar / gLong) + 2*ds/gLong)
         temp['vCar'][n+1] = temp['vCar'][n] + gLong * temp['dt'][n]
-        temp['QFuel'][n] = 0.58
+        # temp['QFuel'][n] = 0.58
+        temp['QFuel'][n] = polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
         n = n+1
         i += 1
 
