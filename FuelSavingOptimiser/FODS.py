@@ -104,11 +104,6 @@ def saveJson(x, path):
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
 
-# def moving_average(a, n) :
-#     ret = np.cumsum(a, dtype=float)
-#     ret[n:] = ret[n:] - ret[:-n]
-#     return ret[n - 1:] / n
-
 
 def moving_average(a, n):
     temp = a[-n:]
@@ -160,31 +155,8 @@ def createTrack(x):
 
 def calc(dirPath):
 
-    VFueliRacing = np.array([3.255, 3.264, 3.271, 3.218, 3.224, 3.182, 3.106, 3.098, 3.005, 3.026, 3.003, 2.904, 2.927, 2.826, 2.817, 2.759])
-    tLapiRacing = np.array([105.488, 105.272, 105.471, 105.461, 105.454, 105.600, 105.608, 105.713, 105.820, 105.636, 105.635, 106.029, 105.939, 106.393, 106.309, 106.463])-105.35
-
     BPlot = True
     nan = float('nan')
-
-    # # import CSV files with the following data: "Time", "Ground Speed", "G Force Lat", "G Force Long", "ThrottleRaw", "BrakeRaw", "FuelUsePerHour", "Fuel Density", "Lap Distance", "FuelLevel",
-    # # "LapDistPct", "aTrackIncline", "GPS Altitude"
-    # # filename = 'fordgt2017_monza full 2020-04-04 15-09-18_Stint_1.csv'
-    # filename = 'fordgt2017_monza full 2020-05-14 20-55-54_Stint_1.csv'
-    # header = ["tLap", "vCar", "gLat", "gLong", "rThrottle", "rBrake", "QFuel", "rhoFuel", "sLap", "FuelLevel", "LapDistPct", "aTrackIncline", "GPSAltitude", "Gear"]
-    #
-    # # import ibt file
-    #
-    # # declare baseline data dict and fill it from CSV
-    # d2 = {}
-    #
-    # for i in range(0, len(header)):
-    #     d2[header[i]] = np.array([])
-    #
-    # with open(filename) as csv_file:
-    #     csv_reader = csv.reader(csv_file)
-    #     for line in csv_reader:
-    #         for i in range(0, len(header)):
-    #             d2[header[i]] = np.append(d2[header[i]], float(line[i]))
 
     root = tk.Tk()
     root.withdraw()
@@ -195,7 +167,6 @@ def calc(dirPath):
     car.loadJson(carPath)
 
     # import ibt file
-    # MyIbtPath = 'C:/Users/Marc/Documents/Projekte/SimRacingTools/fordgt2017_monza full 2020-05-14 20-55-54.ibt'
     MyIbtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
     # MyChannelMap = {'Speed': ['vCar', 1],               # m/s
@@ -220,8 +191,6 @@ def calc(dirPath):
     d['aTrackIncline2'] = np.arctan(np.gradient(moving_average(d['GPSAltitude'], 25))/np.gradient(d['sLap']))
 
     d['sLap'] = d['sLap'] - d['sLap'][0]  # correct distance data
-    # d['LapDistPct'] = d['LapDistPct'] - d['LapDistPct'][0]
-    # d['LapDistPct'] = d['LapDistPct'] / d['LapDistPct'][-1] *100
 
     # do some calculations for baseline data
     d['dt'] = np.diff(d['SessionTime'])
@@ -243,7 +212,6 @@ def calc(dirPath):
 
     plt.ioff()
     plt.figure()
-    # plt.close()
     plt.plot(d['sLap'], d['vCar'], 'k', label='Speed')
     plt.grid()
     plt.title('Apex Points')
@@ -251,7 +219,6 @@ def calc(dirPath):
     plt.ylabel('vCar [m/s]')
     plt.scatter(d['sLap'][NApex], d['vCar'][NApex], label='Apex Points')
     plt.legend()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/apexPoints.png', dpi=300, orientation='landscape', progressive=True)
 
     # cut lap at first apex
@@ -299,7 +266,6 @@ def calc(dirPath):
     LiftGear = c['Gear'][NBrake]
 
     plt.figure()
-    # plt.close()
     plt.plot(c['sLap'], c['vCar'], label='Speed - Push Lap')
     plt.scatter(c['sLap'][NWOT], c['vCar'][NWOT], label='Full Throttle Points')
     plt.scatter(c['sLap'][NBrake], c['vCar'][NBrake], label='Brake Points')
@@ -310,7 +276,6 @@ def calc(dirPath):
     plt.title('Sections')
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/sections.png', dpi=300, orientation='landscape', progressive=True)
 
     print('\nPush Lap:')
@@ -325,7 +290,6 @@ def calc(dirPath):
         NLiftEarliest = np.append(NLiftEarliest, n)
 
     plt.figure()
-    # plt.close()
     plt.title('Earliest Lift Points')
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
@@ -334,7 +298,6 @@ def calc(dirPath):
     plt.scatter(c_temp['sLap'][NLiftEarliest], c_temp['vCar'][NLiftEarliest], label='Earliest Lift Point')
     plt.grid()
     plt.legend()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/earliestLift.png', dpi=300, orientation='landscape', progressive=True)
 
     # for each lifting zone calculate various ratios of lifting
@@ -376,32 +339,27 @@ def calc(dirPath):
 
         if BPlot:
             plt.figure()
-            # plt.close()
             plt.title('Lap Time Loss - Lift Zone ' + str(i+1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
             plt.scatter(rLift, tLapRLift[i, :])
             plt.plot(rLiftPlot, poly6(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
-            # plt.show(block=False)
             plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i+1) + '.png', dpi=300, orientation='landscape', progressive=True)
 
             plt.figure()
-            # plt.close()
             plt.title('Fuel Save - Lift Zone ' + str(i+1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
             plt.plot(rLiftPlot, poly6(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
-            # plt.show(block=False)
             plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i+1) + '.png', dpi=300, orientation='landscape', progressive=True)
 
     # maximum lift
     tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), car, c, NLiftEarliest, NBrake, None, False, LiftGear)
 
     # optimisation for 100 steps between maximum lift and push
-    VFuelTGT = np.max([3.1, VFuelMaxSave])
     VFuelTGT = np.linspace(VFuelMaxSave, c['VFuel'][-1], 100)
 
     print('\nMaximum Lift:')
@@ -432,19 +390,15 @@ def calc(dirPath):
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
 
     plt.figure()
-    # plt.close()
     plt.title('Detla tLap vs VFuel')
     plt.xlabel('VFuel [l]')
     plt.ylabel('Delta tLap [s]')
     plt.plot(LiftPointsVsFuelCons['VFuelTGT'], fun, label='Simulation')
-    # plt.scatter(VFueliRacing, tLapiRacing, label='iRacing')
     plt.grid()
     plt.legend()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
 
     plt.figure()
-    # plt.close()
     plt.title('rLift vs VFuelTGT')
     plt.xlabel('VFuelTGT [l]')
     plt.ylabel('rLift [-]')
@@ -453,7 +407,6 @@ def calc(dirPath):
 
     plt.legend()
     plt.grid()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/rLift_vs_vFuelTGT.png', dpi=300, orientation='landscape', progressive=True)
 
     # get LapDistPct
@@ -465,66 +418,6 @@ def calc(dirPath):
         for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
             LiftPointsVsFuelCons['LapDistPct'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
 
-    # # correlation -------------------------
-    # temp1, temp2, C = costFcn(LiftPointsVsFuelCons['LiftPoints'][68, :], car, copy.deepcopy(c), NLiftEarliest, NBrake, None, False, LiftGear)
-    #
-    # # transform back to original lap
-    # temp = copy.deepcopy(c)
-    # r = {}
-    # keys = list(temp.keys())
-    #
-    # for i in range(0, len(temp)):
-    #     if keys[i] == 'tLap':
-    #         r[keys[i]] = temp[keys[i]][NCut:-1] - d['tLap'][NApex[0]]
-    #         r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['dt'][-1])
-    #     elif keys[i] == 'sLap':
-    #         r[keys[i]] = temp[keys[i]][NCut:-1] - d['sLap'][NApex[0]]
-    #         r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['ds'][-1])
-    #     elif keys[i] == 'LapDistPct':
-    #         r[keys[i]] = temp[keys[i]][NCut:-1] - d['LapDistPct'][NApex[0]]
-    #         r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut] + r[keys[i]][-1] + temp['dLapDistPct'][-1])
-    #     else:
-    #         r[keys[i]] = temp[keys[i]][NCut:-1]
-    #         r[keys[i]] = np.append(r[keys[i]], temp[keys[i]][0:NCut])
-    #
-    # # re-do calculations for cut lap
-    # r['dt'] = np.diff(r['tLap'])
-    # r['ds'] = np.diff(r['sLap'])
-    # r['dLapDistPct'] = np.diff(r['LapDistPct'])
-    # r = calcFuel(r)
-    # r = calcLapTime(r)
-    #
-    # # CORREELATION transform back to original lap
-    # temp2 = copy.deepcopy(C)
-    # R = {}
-    # keys = list(temp2.keys())
-    #
-    # for i in range(0, len(temp2)):
-    #     if keys[i] == 'tLap':
-    #         R[keys[i]] = temp2[keys[i]][NCut:-1] - d['tLap'][NApex[0]]
-    #         R[keys[i]] = np.append(R[keys[i]], temp2[keys[i]][0:NCut] + R[keys[i]][-1] + temp2['dt'][-1])
-    #     elif keys[i] == 'sLap':
-    #         R[keys[i]] = temp2[keys[i]][NCut:-1] - d['sLap'][NApex[0]]
-    #         R[keys[i]] = np.append(R[keys[i]], temp2[keys[i]][0:NCut] + R[keys[i]][-1] + temp2['ds'][-1])
-    #     elif keys[i] == 'LapDistPct':
-    #         R[keys[i]] = temp2[keys[i]][NCut:-1] - d['LapDistPct'][NApex[0]]
-    #         R[keys[i]] = np.append(R[keys[i]], temp2[keys[i]][0:NCut] + R[keys[i]][-1] + temp2['dLapDistPct'][-1])
-    #     else:
-    #         R[keys[i]] = temp2[keys[i]][NCut:-1]
-    #         R[keys[i]] = np.append(R[keys[i]], temp2[keys[i]][0:NCut])
-    #
-    # # re-do calculations for cut lap
-    # R['sLap'] = R['sLap'] - R['sLap'][0]
-    # R['tLap'] = R['tLap'] - R['tLap'][0]
-    # R['LapDistPct'] = R['LapDistPct'] - R['LapDistPct'][0]
-    # R['dt'] = np.diff(R['tLap'])
-    # R['ds'] = np.diff(R['sLap'])
-    # R['dLapDistPct'] = np.diff(R['LapDistPct'])
-    # R = calcFuel(R)
-    # R = calcLapTime(R)
-
-
-    # NApex = NApex[0:-1] + len(d['vCar']) - NCut - 1
     NApex = NApex + len(d['vCar']) - NCut - 1
     NApex[NApex > len(d['vCar'])] = NApex[NApex > len(d['vCar'])] - len(d['vCar']) + 1
     NApex = np.sort(NApex)
@@ -542,7 +435,6 @@ def calc(dirPath):
     NWOT = np.sort(NWOT)
 
     plt.figure()
-    # plt.close()
     plt.plot(d['LapDistPct'], d['vCar'], label='original')
     plt.plot(d['LapDistPct'], d['vCar'], label='new', linestyle='dashed')
     plt.scatter(d['LapDistPct'][NApex], d['vCar'][NApex], label='NApex')
@@ -551,13 +443,11 @@ def calc(dirPath):
     plt.scatter(d['LapDistPct'][NWOT], d['vCar'][NWOT], label='NWOT')
     plt.legend()
     plt.grid()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/resultsCheck.png', dpi=300, orientation='landscape', progressive=True)
 
 
 
     plt.figure()
-    # plt.close()
     plt.plot(d['x'], d['y'], label='Track')
     plt.scatter(d['x'][NApex], d['y'][NApex], label='NApex')
     plt.scatter(d['x'][NBrake], d['y'][NBrake], label='NBrake')
@@ -565,32 +455,11 @@ def calc(dirPath):
     plt.scatter(d['x'][NWOT], d['y'][NWOT], label='NWOT')
     plt.legend()
     plt.grid()
-    # plt.show(block=False)
     plt.savefig(resultsDirPath + '/trackMap.png', dpi=300, orientation='landscape', progressive=True)
 
     LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] + 100 - c['LapDistPct'][NCut]
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)
-
-    # correlation -------------------------
-    # ibtPath = 'C:/Users/Marc/Documents/iRacing/Telemetry/fordgt2017_monza full 2020-05-14 21-20-28.ibt'
-    # ibtPath = 'C:/Users/Marc/Documents/Projekte/SimRacingTools/FuelSavingOptimiser/fordgt2017_monza full 2020-05-03 20-52-05.ibt'
-    #
-    #
-    # ir_ibt = irsdk.IBT()
-    # ir_ibt.open(ibtPath)
-    # i = dict()
-    # i['vCar'] = np.array(ir_ibt.get_all('Speed'))
-    # i['LapDistPct'] = np.array(ir_ibt.get_all('LapDistPct'))
-    # i['NLap'] = np.array(ir_ibt.get_all('Lap'))
-    # k = [i for i, x in enumerate(i['NLap']) if x == 34]
-    #
-    # plt.figure()
-    # plt.plot(R['LapDistPct']*100, R['vCar'], label='Simulation')
-    # plt.plot(i['LapDistPct'][k]*100, i['vCar'][k], label='iRacing')
-    # plt.legend()
-    # plt.grid()
-    # plt.show(block=False)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Fuel Saving Optimisation!')
