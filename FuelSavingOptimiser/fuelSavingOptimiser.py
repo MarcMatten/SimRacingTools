@@ -156,7 +156,7 @@ def optimise(dirPath):
     root = tk.Tk()
     root.withdraw()
 
-    carPath = filedialog.askopenfilename(initialdir=dirPath + "/car", title="Select car JSON file",
+    carPath = filedialog.askopenfilename(initialdir=dirPath + "/data/car", title="Select car JSON file",
                                          filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
     car.loadJson(carPath)
@@ -178,8 +178,9 @@ def optimise(dirPath):
     d = importIBT.importIBT(MyIbtPath, 'f')
 
     # create results directory
-    resultsDirPath = dirPath + "/FuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
-    os.mkdir(resultsDirPath)  # TODO: doesn't work if directory already exists
+    resultsDirPath = dirPath + "/data/fuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    if not os.path.exists(resultsDirPath):
+        os.mkdir(resultsDirPath)
 
     # calculate aTrackIncline smooth(atan( derivative('Alt' [m]) / derivative('Lap Distance' [m]) ), 1.5)
     d['aTrackIncline'] = np.arctan(np.gradient(d['GPSAltitude']) / np.gradient(d['sLap']))
@@ -215,6 +216,7 @@ def optimise(dirPath):
     plt.scatter(d['sLap'][NApex], d['vCar'][NApex], label='Apex Points')
     plt.legend()
     plt.savefig(resultsDirPath + '/apexPoints.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     # cut lap at first apex
     # create new data dict for cut lap --> c
@@ -294,6 +296,7 @@ def optimise(dirPath):
     plt.grid()
     plt.legend()
     plt.savefig(resultsDirPath + '/earliestLift.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     # for each lifting zone calculate various ratios of lifting
     rLift = np.linspace(0, 1, 50)
@@ -341,6 +344,7 @@ def optimise(dirPath):
             plt.plot(rLiftPlot, maths.poly6(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
             plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.close()
 
             plt.figure()  # TODO: make plot nice
             plt.title('Fuel Save - Lift Zone ' + str(i + 1))
@@ -350,6 +354,7 @@ def optimise(dirPath):
             plt.plot(rLiftPlot, maths.poly6(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
             plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.close()
 
     # maximum lift
     tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), car, c, NLiftEarliest, NBrake, None, False, LiftGear)
@@ -394,6 +399,7 @@ def optimise(dirPath):
     plt.grid()
     plt.legend()
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     plt.figure()  # TODO: make plot nice
     plt.title('rLift vs VFuelTGT')
@@ -405,6 +411,7 @@ def optimise(dirPath):
     plt.legend()
     plt.grid()
     plt.savefig(resultsDirPath + '/rLift_vs_vFuelTGT.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     # get LapDistPct
     LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
@@ -441,6 +448,7 @@ def optimise(dirPath):
     plt.legend()
     plt.grid()
     plt.savefig(resultsDirPath + '/resultsCheck.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     plt.figure()  # TODO: make plot nice
     plt.plot(d['x'], d['y'], label='Track')
@@ -451,6 +459,7 @@ def optimise(dirPath):
     plt.legend()
     plt.grid()
     plt.savefig(resultsDirPath + '/trackMap.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] + 100 - c['LapDistPct'][NCut]
 

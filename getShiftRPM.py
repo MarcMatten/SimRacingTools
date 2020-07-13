@@ -21,7 +21,7 @@ def getShiftRPM(dirPath):
     path = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
                                            filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
     
-    carPath = filedialog.askopenfilename(initialdir=dirPath+"/car", title="Select car JSON file",
+    carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
                                            filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
     car.loadJson(carPath)
@@ -31,8 +31,9 @@ def getShiftRPM(dirPath):
     d = importIBT.importIBT(path)
 
     # create results directory
-    resultsDirPath = dirPath + "/shiftTone/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
-    os.mkdir(resultsDirPath) # TODO: doesn't work if directory already exists
+    resultsDirPath = dirPath + "/data/shiftTone/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    if not os.path.exists(resultsDirPath):
+        os.mkdir(resultsDirPath)
 
     d['BStraightLine'] = np.logical_and((d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03, np.abs(d['vCar']) > 10)
     d['BWOT'] = np.logical_and((d['rThrottle']) > 0.99, np.abs(d['rBrake']) < 0.01)
