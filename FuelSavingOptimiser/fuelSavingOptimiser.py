@@ -1,5 +1,4 @@
 import copy
-import json
 import os
 import time
 import tkinter as tk
@@ -10,7 +9,7 @@ import numpy as np
 import scipy.optimize
 import scipy.signal
 
-from functionalities.libs import filters, maths, importIBT
+from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
 
 rhoFuel = 0.75  # TODO can this be obtained from IBT file?
@@ -99,25 +98,16 @@ def calcFuelConstraint(rLift, *args):
     return dVFuel - VFuelConsTGT
 
 
-def saveJson(x, path):  # TODO: outsource to separate JSON library
+def saveJson(x, path):
     filepath = filedialog.asksaveasfilename(initialdir=path, title="Where to save results?",
                                             filetypes=[("JSON files", "*.json"), ("all files", "*.*")])
-    # filepath = 'FuelTGTLiftPoints.json'
 
-    variables = list(x.keys())
-
-    data = {}
-
-    for i in range(0, len(variables)):
-        data[variables[i]] = x[variables[i]].transpose().tolist()
-
-    with open(filepath, 'w') as outfile:
-        json.dump(data, outfile, indent=4, sort_keys=True)
+    importExport.saveJson(x, filepath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
 
 
-def createTrack(x):  # TODO: outsource to separate library
+def createTrack(x):  # TODO: outsource to separate library, same code as in iDDUcalc?
     dx = np.array(0)
     dy = np.array(0)
 
@@ -159,7 +149,9 @@ def optimise(dirPath):
     carPath = filedialog.askopenfilename(initialdir=dirPath + "/data/car", title="Select car JSON file",
                                          filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
-    car.loadJson(carPath)
+    car.load(carPath)
+
+    # TODO: check if car has roll-out curve
 
     # import ibt file
     MyIbtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
@@ -175,7 +167,7 @@ def optimise(dirPath):
     #               'Alt': ['GPSAltitude', 1]             # m,
     #               }
 
-    d = importIBT.importIBT(MyIbtPath, 'f')
+    d = importIBT.importIBT(MyIbtPath, 'f')  # TODO: check if data is sufficient
 
     # create results directory
     resultsDirPath = dirPath + "/data/fuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment

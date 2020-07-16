@@ -24,7 +24,7 @@ def getShiftRPM(dirPath):
     carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
                                            filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
-    car.loadJson(carPath)
+    car.load(carPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting Upshift calculation for: ' + car.name)
 
@@ -130,7 +130,7 @@ def getShiftRPM(dirPath):
 
     # save so car file
     car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1])
-    car.saveJson(carPath)
+    car.save(carPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
 

@@ -21,7 +21,7 @@ def getRollOutCurve(dirPath):
     carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
                                            filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
     car = Car('CarName')
-    car.loadJson(carPath)
+    car.load(carPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting roll-out curve calculation for: ' + car.name)
 
@@ -80,6 +80,6 @@ def getRollOutCurve(dirPath):
 
     # save so car file
     car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear)
-    car.saveJson(carPath)
+    car.save(carPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')
