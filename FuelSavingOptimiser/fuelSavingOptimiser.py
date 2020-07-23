@@ -102,6 +102,10 @@ def saveJson(x, path):
     filepath = filedialog.asksaveasfilename(initialdir=path, title="Where to save results?",
                                             filetypes=[("JSON files", "*.json"), ("all files", "*.*")])
 
+    if not filepath:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path provided...aborting!')
+        return
+
     importExport.saveJson(x, filepath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
@@ -148,6 +152,11 @@ def optimise(dirPath):
 
     carPath = filedialog.askopenfilename(initialdir=dirPath + "/data/car", title="Select car JSON file",
                                          filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+
+    if not carPath:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
+        return
+
     car = Car('CarName')
     car.load(carPath)
 
@@ -155,6 +164,10 @@ def optimise(dirPath):
 
     # import ibt file
     MyIbtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+
+    if not MyIbtPath:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to IBT file provided...aborting!')
+        return
 
     # MyChannelMap = {'Speed': ['vCar', 1],               # m/s
     #               'LapCurrentLapTime': ['tLap', 1],     # s

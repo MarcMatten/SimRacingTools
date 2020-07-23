@@ -20,9 +20,18 @@ def getShiftRPM(dirPath):
     root.withdraw()
     path = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
                                            filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+
+    if not path:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to ibt file provided...aborting!')
+        return
     
     carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
                                            filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+
+    if not carPath:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
+        return
+
     car = Car('CarName')
     car.load(carPath)
 
