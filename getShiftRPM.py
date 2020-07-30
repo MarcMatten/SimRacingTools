@@ -10,6 +10,7 @@ import scipy.optimize
 import scipy.signal
 
 from functionalities.libs import filters, maths, importIBT
+from functionalities.RTDB import RTDB
 from libs.Car import Car
 
 
@@ -43,32 +44,34 @@ def getShiftRPM(dirPath):
     d, var_headers_names = importIBT.importIBT(ibtPath,
                             channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
                             channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
-
-    # If car file exists, load it. Otherwise, create new car object
-
     setupName = d['DriverInfo']['DriverSetupName']
-    trackName = d['WeekendInfo']['TrackName']
-    trackDisplayName = d['WeekendInfo']['TrackDisplayName']
+    # trackName = d['WeekendInfo']['TrackName']
+    # trackDisplayName = d['WeekendInfo']['TrackDisplayName']
     DriverCarIdx = d['DriverInfo']['DriverCarIdx']
-    carPath = d['DriverInfo']['Drivers'][DriverCarIdx]['CarPath']
+    # carPath = d['DriverInfo']['Drivers'][DriverCarIdx]['CarPath']
     carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
 
+    # If car file exists, load it. Otherwise, create new car object
     car = Car(carScreenNameShort)
+    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+
     if carScreenNameShort + '.json' in getCarFiles(dirPath+'/data/car'):
-        carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+        car.load(carFilePath)
     else:
-        # car.createCar(d, var_headers_names=var_headers_names)  # TODO: create car when no car file available
-        carFilePath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
-                                               filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+        tempDB = RTDB.RTDB()
+        tempDB.initialise(d, False)
+        UserShiftRPM = [0] * 7
+        UserShiftFlag = [False] * 7
 
-        if not carFilePath:
-            print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
-            return
+        for k in range(0,np.max(d['Gear'])-1):
+            UserShiftRPM[k] = d['DriverInfo']['DriverCarSLShiftRPM']
+            UserShiftFlag[k] = True
 
-    car.load(carFilePath)
+        tempDB.initialise({'UserShiftRPM': UserShiftRPM, 'UpshiftStrategy': 5, 'UserShiftFlag': UserShiftFlag}, False)
 
+        car.createCar(tempDB, var_headers_names=var_headers_names)
 
-
+        del tempDB
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting Upshift calculation for: ' + car.name)
 
@@ -85,7 +88,6 @@ def getShiftRPM(dirPath):
     d['BShiftRPM'] = np.logical_and(d['BStraightLine'], d['BWOT'])
     d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.3)
 
-    # minRPM = np.mean(d['RPM'][d['BShiftRPM']])
     minRPM = 2000
 
     plt.ioff()
