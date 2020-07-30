@@ -44,7 +44,7 @@ def getShiftRPM(dirPath):
     # imoport ibt file
     d, var_headers_names = importIBT.importIBT(ibtPath,
                                                channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
-                            channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
+                                               channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
 
     setupName = d['DriverInfo']['DriverSetupName']
     DriverCarIdx = d['DriverInfo']['DriverCarIdx']

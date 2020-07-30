@@ -1,5 +1,6 @@
 import copy
 import os
+import glob
 import time
 import tkinter as tk
 from tkinter import filedialog
@@ -99,7 +100,9 @@ def calcFuelConstraint(rLift, *args):
 
 
 def saveJson(x, path):
-    filepath = filedialog.asksaveasfilename(initialdir=path, title="Where to save results?",
+    filepath = filedialog.asksaveasfilename(initialdir=path,
+                                            initialfile='fuelSaving.json',
+                                            title="Where to save results?",
                                             filetypes=[("JSON files", "*.json"), ("all files", "*.*")])
 
     if not filepath:
@@ -144,49 +147,56 @@ def createTrack(x):  # TODO: outsource to separate library, same code as in iDDU
     return x, y
 
 
+def getCarFiles(dirPath):
+    carList = []
+    dirTemp = os.getcwd()
+
+    # get list of trackfiles  # TODO: make this a helper functions, used in various places
+    os.chdir(dirPath)
+    for file in glob.glob("*.json"):
+        carList.append(file)
+    os.chdir(dirTemp)
+
+    return carList
+
+
 def optimise(dirPath):
     BPlot = True
 
     root = tk.Tk()
     root.withdraw()
+    
+    # get ibt path
+    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+                                         filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
-    carPath = filedialog.askopenfilename(initialdir=dirPath + "/data/car", title="Select car JSON file",
-                                         filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
-
-    if not carPath:
-        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
+    if not ibtPath:
+        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to ibt file provided...aborting!')
         return
 
-    car = Car('CarName')
-    car.load(carPath)
+    # imoport ibt file
+    d, _ = importIBT.importIBT(ibtPath,
+                               lap='f',
+                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY' ,'Yaw', 'Gear'],
+                               channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
+
+    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
+    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
+    TrackDisplayShortName = d['WeekendInfo']['TrackDisplayShortName']
+
+    # If car file exists, load it. Otherwise, throw an error. TODO: whole section is duplicate with rollOut
+    car = Car(carScreenNameShort)
+    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+
+    if carScreenNameShort + '.json' in getCarFiles(dirPath+'/data/car'):
+        car.load(carFilePath)
+    else:
+        print('Error! Car file for {} does not exist. Create car with roll-out curves first!'.format(carScreenNameShort))
 
     # TODO: check if car has roll-out curve
 
-    # import ibt file
-    MyIbtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file", filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
-
-    if not MyIbtPath:
-        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to IBT file provided...aborting!')
-        return
-
-    # MyChannelMap = {'Speed': ['vCar', 1],               # m/s
-    #               'LapCurrentLapTime': ['tLap', 1],     # s
-    #               'LatAccel': ['gLat', 1],              # m/s²
-    #               'LongAccel': ['gLong', 1],            # m/s²
-    #               'ThrottleRaw': ['rThrottle', 1],      # 1
-    #               'BrakeRaw': ['rBrake', 1],            # 1
-    #               'FuelUsePerHour': ['QFuel', 1/3.6],   # l/h --> g/s
-    #               'LapDist': ['sLap', 1],               # m
-    #               'Alt': ['zTrack', 1]             # m,
-    #               }
-
-    d, _ = importIBT.importIBT(MyIbtPath,
-                            lap='f',
-                            channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY' ,'Yaw', 'Gear'],
-                            channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
-
     # create results directory
-    resultsDirPath = dirPath + "/data/fuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    resultsDirPath = dirPath + "/data/fuelSaving/" + TrackDisplayShortName + ' - ' + carScreenNameShort
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
@@ -473,6 +483,8 @@ def optimise(dirPath):
     plt.close()
 
     LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] + 100 - c['LapDistPct'][NCut]
+    LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
+    LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)
