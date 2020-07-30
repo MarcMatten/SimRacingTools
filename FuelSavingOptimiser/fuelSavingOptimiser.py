@@ -85,7 +85,7 @@ def objectiveLapTime(rLift, *args):
     tLapPolyFit = args[0]
     dt = 0
     for i in range(0, len(rLift)):
-        dt = dt + maths.poly6(rLift[i], tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5])
+        dt = dt + maths.polyVal(rLift[i], tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5])
     return dt
 
 
@@ -94,7 +94,7 @@ def calcFuelConstraint(rLift, *args):
     VFuelConsTGT = args[1]
     dVFuel = 0
     for i in range(0, len(rLift)):
-        dVFuel = dVFuel + maths.poly6(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
+        dVFuel = dVFuel + maths.polyVal(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
     return dVFuel - VFuelConsTGT
 
 
@@ -177,10 +177,13 @@ def optimise(dirPath):
     #               'BrakeRaw': ['rBrake', 1],            # 1
     #               'FuelUsePerHour': ['QFuel', 1/3.6],   # l/h --> g/s
     #               'LapDist': ['sLap', 1],               # m
-    #               'Alt': ['GPSAltitude', 1]             # m,
+    #               'Alt': ['zTrack', 1]             # m,
     #               }
 
-    d = importIBT.importIBT(MyIbtPath, 'f')  # TODO: check if data is sufficient
+    d = importIBT.importIBT(MyIbtPath,
+                            lap='f',
+                            channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY' ,'Yaw', 'Gear'],
+                            channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
 
     # create results directory
     resultsDirPath = dirPath + "/data/fuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
@@ -188,8 +191,8 @@ def optimise(dirPath):
         os.mkdir(resultsDirPath)
 
     # calculate aTrackIncline smooth(atan( derivative('Alt' [m]) / derivative('Lap Distance' [m]) ), 1.5)
-    d['aTrackIncline'] = np.arctan(np.gradient(d['GPSAltitude']) / np.gradient(d['sLap']))
-    d['aTrackIncline2'] = np.arctan(np.gradient(filters.movingAverage(d['GPSAltitude'], 25)) / np.gradient(d['sLap']))
+    d['aTrackIncline'] = np.arctan(np.gradient(d['zTrack']) / np.gradient(d['sLap']))
+    d['aTrackIncline2'] = np.arctan(np.gradient(filters.movingAverage(d['zTrack'], 25)) / np.gradient(d['sLap']))
 
     d['sLap'] = d['sLap'] - d['sLap'][0]  # correct distance data
 
@@ -241,8 +244,11 @@ def optimise(dirPath):
             c[keys[i]] = temp[keys[i]][NApex[0]:-1] - d['LapDistPct'][NApex[0]]
             c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]] + c[keys[i]][-1] + temp['dLapDistPct'][-1])
         else:
-            c[keys[i]] = temp[keys[i]][NApex[0]:-1]
-            c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]])
+            if type(temp[keys[i]]) is dict:
+                c[keys[i]] = temp[keys[i]]
+            else:
+                c[keys[i]] = temp[keys[i]][NApex[0]:-1]
+                c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]])
 
     # re-do calculations for cut lap
     c['dt'] = np.diff(c['tLap'])
@@ -337,8 +343,8 @@ def optimise(dirPath):
         f = yFuel[~np.isnan(yTime)]
         t = yTime[~np.isnan(yTime)]
 
-        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.poly6, x, t)
-        VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.poly6, x, f)
+        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, t, [0]*6)
+        VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, f, [0]*6)
 
         if BPlot:  # TODO: save these plots in a subdirectory
             plt.figure()  # TODO: make plot nice
@@ -346,7 +352,7 @@ def optimise(dirPath):
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
             plt.scatter(rLift, tLapRLift[i, :])
-            plt.plot(rLiftPlot, maths.poly6(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
+            plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
             plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
@@ -356,7 +362,7 @@ def optimise(dirPath):
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
-            plt.plot(rLiftPlot, maths.poly6(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
+            plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
             plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()

@@ -37,7 +37,11 @@ def getShiftRPM(dirPath):
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting Upshift calculation for: ' + car.name)
 
-    d = importIBT.importIBT(path)
+    d = importIBT.importIBT(path,
+                            channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
+                            channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
+
+    # TODO: check it telemetry file is suitable
 
     # create results directory
     resultsDirPath = dirPath + "/data/shiftTone/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
@@ -84,10 +88,10 @@ def getShiftRPM(dirPath):
 
         d['BRPMRange'].append(tempBRPMRange)
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.poly3, d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]])
+        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]], [0, 0, 0, 0])
         gLongPolyFit.append(PolyFitTemp)
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.poly2, d['vCar'][d['BRPMRange'][i]], d['RPM'][d['BRPMRange'][i]])
+        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BRPMRange'][i]], d['RPM'][d['BRPMRange'][i]], [0, 0, 0])
         RPMPolyFit.append(PolyFitTemp)
 
         vCarMin.append(np.min(d['vCar'][d['BRPMRange'][i]]))
@@ -95,19 +99,19 @@ def getShiftRPM(dirPath):
         vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
 
         plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]])
-        plt.plot(vCar, maths.poly3(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]))
+        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]))
 
     vCarShiftOptimal = []
     vCarShiftTarget = []
 
     for k in range(0, np.max(d['Gear']) - 1):
-        f1 = lambda x: maths.poly3(x, gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3])
-        f2 = lambda x: maths.poly3(x, gLongPolyFit[k + 1][0], gLongPolyFit[k + 1][1], gLongPolyFit[k + 1][2], gLongPolyFit[k + 1][3])
+        f1 = lambda x: maths.polyVal(x, gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3])
+        f2 = lambda x: maths.polyVal(x, gLongPolyFit[k + 1][0], gLongPolyFit[k + 1][1], gLongPolyFit[k + 1][2], gLongPolyFit[k + 1][3])
 
         result = maths.findIntersection(f1, f2, vCarMax[k])
 
         vCarShiftOptimal.append(np.min([result[0], vCarMax[k]]))
-        vCarShiftTarget.append(vCarShiftOptimal[k] - tReaction * maths.poly3(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
+        vCarShiftTarget.append(vCarShiftOptimal[k] - tReaction * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
 
         plt.scatter(vCarShiftOptimal[k], f1(vCarShiftOptimal[k]), marker='o', color='black')
         plt.scatter(vCarShiftTarget[k], f1(vCarShiftTarget[k]), marker='o', color='red')
@@ -127,11 +131,11 @@ def getShiftRPM(dirPath):
 
     for i in range(0, np.max(d['Gear'])):
         vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
-        plt.plot(vCar, maths.poly2(vCar, RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
+        plt.plot(vCar, maths.polyVal(vCar, RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
 
         if i < np.max(d['Gear']) - 1:
-            nMotorShiftOptimal.append(maths.poly2(vCarShiftOptimal[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
-            nMotorShiftTarget.append(maths.poly2(vCarShiftTarget[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
+            nMotorShiftOptimal.append(maths.polyVal(vCarShiftOptimal[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
+            nMotorShiftTarget.append(maths.polyVal(vCarShiftTarget[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
             plt.scatter(vCarShiftOptimal[i], nMotorShiftOptimal[i], marker='o', color='black')
             plt.scatter(vCarShiftTarget[i], nMotorShiftTarget[i], marker='o', color='red')
 
