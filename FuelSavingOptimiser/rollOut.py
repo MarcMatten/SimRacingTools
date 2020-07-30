@@ -1,3 +1,4 @@
+import glob
 import os
 import time
 import tkinter as tk
@@ -8,40 +9,73 @@ import numpy as np
 import scipy.optimize
 import scipy.signal
 
+from functionalities.RTDB import RTDB
 from functionalities.libs import maths, importIBT
 from libs.Car import Car
+
+
+def getCarFiles(dirPath):
+    carList = []
+    dirTemp = os.getcwd()
+
+    # get list of trackfiles  # TODO: make this a helper functions, used in various places
+    os.chdir(dirPath)
+    for file in glob.glob("*.json"):
+        carList.append(file)
+    os.chdir(dirTemp)
+
+    return carList
 
 
 def getRollOutCurve(dirPath):
     root = tk.Tk()
     root.withdraw()
-    path = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
-                                           filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
-    if not path:
+    # get ibt path
+    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+                                         filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+
+    if not ibtPath:
         print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to ibt file provided...aborting!')
         return
 
-    carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
-                                           filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+    # imoport ibt file
+    d, var_headers_names = importIBT.importIBT(ibtPath,
+                                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel'],
+                                               channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')
 
-    if not carPath:
-        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
-        return
+    setupName = d['DriverInfo']['DriverSetupName']
+    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
+    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
 
-    car = Car('CarName')
-    car.load(carPath)
+    # If car file exists, load it. Otherwise, create new car object TODO: whole section is duplicate with getShiftRPM
+    car = Car(carScreenNameShort)
+    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+
+    if carScreenNameShort + '.json' in getCarFiles(dirPath + '/data/car'):
+        car.load(carFilePath)
+    else:
+        tempDB = RTDB.RTDB()
+        tempDB.initialise(d, False)
+        UserShiftRPM = [0] * 7
+        UserShiftFlag = [False] * 7
+
+        for k in range(0, np.max(d['Gear']) - 1):
+            UserShiftRPM[k] = d['DriverInfo']['DriverCarSLShiftRPM']
+            UserShiftFlag[k] = True
+
+        tempDB.initialise({'UserShiftRPM': UserShiftRPM, 'UpshiftStrategy': 5, 'UserShiftFlag': UserShiftFlag}, False)
+
+        car.createCar(tempDB, var_headers_names=var_headers_names)
+
+        del tempDB
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting roll-out curve calculation for: ' + car.name)
-
-    d, _ = importIBT.importIBT(path,
-                            channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel'],
-                            channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
 
     # TODO: check it telemetry file is suitable
 
     # create results directory
-    resultsDirPath = dirPath + "/data/fuelSaving/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    resultsDirPath = dirPath + "/data/fuelSaving/" + ibtPath.split('/')[-1].split('.ibt')[0]
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
@@ -89,10 +123,10 @@ def getRollOutCurve(dirPath):
         plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
         plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]))
 
-    plt.savefig(resultsDirPath + '/coastint_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
+    plt.savefig(resultsDirPath + '/coasting_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
 
     # save so car file
-    car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear)
-    car.save(carPath)
+    car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear, setupName, d['CarSetup'])
+    car.save(carFilePath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')

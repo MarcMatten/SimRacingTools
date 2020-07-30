@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 import time
 import tkinter as tk
 from tkinter import filedialog
@@ -9,8 +9,8 @@ import numpy as np
 import scipy.optimize
 import scipy.signal
 
-from functionalities.libs import filters, maths, importIBT
 from functionalities.RTDB import RTDB
+from functionalities.libs import filters, maths, importIBT
 from libs.Car import Car
 
 
@@ -28,30 +28,29 @@ def getCarFiles(dirPath):
 
 
 def getShiftRPM(dirPath):
-
     tReaction = 0.25  # TODO: as input to tune from GUI
 
     root = tk.Tk()
     root.withdraw()
-    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
-                                           filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+
     # get ibt path
+    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+                                         filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
+
     if not ibtPath:
         print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to ibt file provided...aborting!')
         return
 
     # imoport ibt file
     d, var_headers_names = importIBT.importIBT(ibtPath,
-                            channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
+                                               channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
                             channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
+
     setupName = d['DriverInfo']['DriverSetupName']
-    # trackName = d['WeekendInfo']['TrackName']
-    # trackDisplayName = d['WeekendInfo']['TrackDisplayName']
     DriverCarIdx = d['DriverInfo']['DriverCarIdx']
-    # carPath = d['DriverInfo']['Drivers'][DriverCarIdx]['CarPath']
     carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
 
-    # If car file exists, load it. Otherwise, create new car object
+    # If car file exists, load it. Otherwise, create new car object TODO: whole section is duplicate with rollOut
     car = Car(carScreenNameShort)
     carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
 
