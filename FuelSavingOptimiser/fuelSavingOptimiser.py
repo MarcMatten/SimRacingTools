@@ -180,7 +180,7 @@ def optimise(dirPath):
     #               'Alt': ['zTrack', 1]             # m,
     #               }
 
-    d = importIBT.importIBT(MyIbtPath,
+    d, _ = importIBT.importIBT(MyIbtPath,
                             lap='f',
                             channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY' ,'Yaw', 'Gear'],
                             channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient

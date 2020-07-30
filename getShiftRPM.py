@@ -1,4 +1,5 @@
 import os
+import glob
 import time
 import tkinter as tk
 from tkinter import filedialog
@@ -12,39 +13,69 @@ from functionalities.libs import filters, maths, importIBT
 from libs.Car import Car
 
 
+def getCarFiles(dirPath):
+    carList = []
+    dirTemp = os.getcwd()
+
+    # get list of trackfiles  # TODO: make this a helper functions, used in various places
+    os.chdir(dirPath)
+    for file in glob.glob("*.json"):
+        carList.append(file)
+    os.chdir(dirTemp)
+
+    return carList
+
+
 def getShiftRPM(dirPath):
 
     tReaction = 0.25  # TODO: as input to tune from GUI
 
     root = tk.Tk()
     root.withdraw()
-    path = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
                                            filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
-
-    if not path:
+    # get ibt path
+    if not ibtPath:
         print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to ibt file provided...aborting!')
         return
-    
-    carPath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
-                                           filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
 
-    if not carPath:
-        print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
-        return
-
-    car = Car('CarName')
-    car.load(carPath)
-
-    print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting Upshift calculation for: ' + car.name)
-
-    d = importIBT.importIBT(path,
+    # imoport ibt file
+    d, var_headers_names = importIBT.importIBT(ibtPath,
                             channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings'],
                             channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
+
+    # If car file exists, load it. Otherwise, create new car object
+
+    setupName = d['DriverInfo']['DriverSetupName']
+    trackName = d['WeekendInfo']['TrackName']
+    trackDisplayName = d['WeekendInfo']['TrackDisplayName']
+    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
+    carPath = d['DriverInfo']['Drivers'][DriverCarIdx]['CarPath']
+    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
+
+    car = Car(carScreenNameShort)
+    if carScreenNameShort + '.json' in getCarFiles(dirPath+'/data/car'):
+        carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+    else:
+        # car.createCar(d, var_headers_names=var_headers_names)  # TODO: create car when no car file available
+        carFilePath = filedialog.askopenfilename(initialdir=dirPath+"/data/car", title="Select car JSON file",
+                                               filetypes=(("JSON files", "*.json"), ("all files", "*.*")))
+
+        if not carFilePath:
+            print(time.strftime("%H:%M:%S", time.localtime()) + ':\tNo valid path to car file provided...aborting!')
+            return
+
+    car.load(carFilePath)
+
+
+
+
+    print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting Upshift calculation for: ' + car.name)
 
     # TODO: check it telemetry file is suitable
 
     # create results directory
-    resultsDirPath = dirPath + "/data/shiftTone/" + car.name  # TODO: find better naming, e.g. based on car, track and data or comment
+    resultsDirPath = dirPath + "/data/shiftTone/" + ibtPath.split('/')[-1].split('.ibt')[0]
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
@@ -58,7 +89,7 @@ def getShiftRPM(dirPath):
     minRPM = 2000
 
     plt.ioff()
-    plt.figure(figsize=(8, 5))  # TODO: make plot nice
+    plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
     plt.grid()
     plt.scatter(d['vCar'][d['BShiftRPM']], d['gLong'][d['BShiftRPM']])
     plt.xlabel('vCar [m/s]')
@@ -116,9 +147,9 @@ def getShiftRPM(dirPath):
         plt.scatter(vCarShiftOptimal[k], f1(vCarShiftOptimal[k]), marker='o', color='black')
         plt.scatter(vCarShiftTarget[k], f1(vCarShiftTarget[k]), marker='o', color='red')
 
-    plt.savefig(resultsDirPath + '/gLong_vs_speed.png', dpi=300, orientation='landscape', progressive=True)
+    plt.savefig(resultsDirPath + '/gLong_vs_vCar.png', dpi=300, orientation='landscape', progressive=True)
 
-    plt.figure()  # TODO: make plot nice
+    plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
     plt.scatter(d['vCar'][d['BShiftRPM']], d['RPM'][d['BShiftRPM']])
     plt.grid()
     plt.xlabel('vCar [m/s]')
@@ -139,11 +170,11 @@ def getShiftRPM(dirPath):
             plt.scatter(vCarShiftOptimal[i], nMotorShiftOptimal[i], marker='o', color='black')
             plt.scatter(vCarShiftTarget[i], nMotorShiftTarget[i], marker='o', color='red')
 
-    plt.savefig(resultsDirPath + '/RPM_vs_speed.png', dpi=300, orientation='landscape', progressive=True)
+    plt.savefig(resultsDirPath + '/RPM_vs_vCar.png', dpi=300, orientation='landscape', progressive=True)
 
     # save so car file
-    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1])
-    car.save(carPath)
+    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], setupName, d['CarSetup'])
+    car.save(carFilePath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
 

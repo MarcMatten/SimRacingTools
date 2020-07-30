@@ -34,7 +34,7 @@ def getRollOutCurve(dirPath):
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tStarting roll-out curve calculation for: ' + car.name)
 
-    d = importIBT.importIBT(path,
+    d, _ = importIBT.importIBT(path,
                             channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel'],
                             channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
 
