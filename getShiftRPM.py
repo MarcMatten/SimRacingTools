@@ -1,4 +1,3 @@
-import glob
 import os
 import time
 import tkinter as tk
@@ -10,21 +9,8 @@ import scipy.optimize
 import scipy.signal
 
 from functionalities.RTDB import RTDB
-from functionalities.libs import filters, maths, importIBT
+from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
-
-
-def getCarFiles(dirPath):
-    carList = []
-    dirTemp = os.getcwd()
-
-    # get list of trackfiles  # TODO: make this a helper functions, used in various places
-    os.chdir(dirPath)
-    for file in glob.glob("*.json"):
-        carList.append(file)
-    os.chdir(dirTemp)
-
-    return carList
 
 
 def getShiftRPM(dirPath):
@@ -54,7 +40,7 @@ def getShiftRPM(dirPath):
     car = Car(carScreenNameShort)
     carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
 
-    if carScreenNameShort + '.json' in getCarFiles(dirPath+'/data/car'):
+    if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
         tempDB = RTDB.RTDB()

@@ -1,6 +1,5 @@
 import copy
 import os
-import glob
 import time
 import tkinter as tk
 from tkinter import filedialog
@@ -147,19 +146,6 @@ def createTrack(x):  # TODO: outsource to separate library, same code as in iDDU
     return x, y
 
 
-def getCarFiles(dirPath):
-    carList = []
-    dirTemp = os.getcwd()
-
-    # get list of trackfiles  # TODO: make this a helper functions, used in various places
-    os.chdir(dirPath)
-    for file in glob.glob("*.json"):
-        carList.append(file)
-    os.chdir(dirTemp)
-
-    return carList
-
-
 def optimise(dirPath):
     BPlot = True
 
@@ -188,7 +174,7 @@ def optimise(dirPath):
     car = Car(carScreenNameShort)
     carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
 
-    if carScreenNameShort + '.json' in getCarFiles(dirPath+'/data/car'):
+    if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
         print('Error! Car file for {} does not exist. Create car with roll-out curves first!'.format(carScreenNameShort))
