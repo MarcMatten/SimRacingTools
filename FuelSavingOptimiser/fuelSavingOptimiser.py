@@ -213,6 +213,8 @@ def optimise(dirPath):
     plt.ioff()
     plt.figure()  # TODO: make plot nice
     plt.plot(d['sLap'], d['vCar'], 'k', label='Speed')
+    plt.plot(d['sLap'], d['rThrottle'] * 10, 'g', label='rThrottle')
+    plt.plot(d['sLap'], d['rBrake'] * 10, 'r', label='rBrake')
     plt.grid()
     plt.title('Apex Points')
     plt.xlabel('sLap [m]')
@@ -254,19 +256,46 @@ def optimise(dirPath):
     c = calcLapTime(c)
     NApex = NApex[1:len(NApex)] - NApex[0]
     NApex = np.append(NApex, len(c['tLap'])-1)  # fake apex for last index
-    c['rBrake'][0] = 0.001  # fudging around to find the first brake point
+    c['rBrake'][0] = 1  # fudging around to find the first brake point
 
     # find potential lift point (from full throttle to braking)
-    NWOT = scipy.signal.find_peaks(c['rThrottle'], height=1, plateau_size=80)
-    NBrake = scipy.signal.find_peaks(1-c['rBrake'], height=1, plateau_size=40)
-
-    if not len(NWOT[1]) == len(NBrake[1]):
-        print('Error! Number of brake application and full throttle point don nit match!')
-        quit()
+    NWOT = scipy.signal.find_peaks(c['rThrottle'], height=1, plateau_size=20)
+    NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.9)
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
     NBrake = NBrake[1]['right_edges']
+
+    # elimination obsolete points
+    NApexNew = []
+    NBrakeNew = []
+    NWOTNew = []
+
+    for i in range(0, len(NApex)):
+        k = len(NApex) - 1 - i
+        if NApex[k] > np.min(NBrake):
+            NApexNew.append(NApex[k])
+
+            for j in range(0, len(NBrake)):
+                l = len(NBrake) - 1 - j
+                if NBrake[l] < NApex[k]:
+                    NBrakeNew.append(NBrake[l])
+
+                    for m in range(0, len(NWOT)):
+                        n = len(NWOT) - 1 - m
+                        if NWOT[n] < NBrake[l]:
+                            NWOTNew.append(NWOT[n])
+
+                            break
+
+                    break
+
+    del i, k, m, n, l, j
+
+    NApex = np.flip(NApexNew)
+    NBrake = np.flip(NBrakeNew)
+    NWOT = np.flip(NWOTNew)
+
     LiftGear = c['Gear'][NBrake]
 
     plt.figure()  # TODO: make plot nice

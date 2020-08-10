@@ -65,7 +65,7 @@ def getRollOutCurve(dirPath):
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
-    d['BStraightLine'] = np.logical_and(np.abs(d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03)
+    d['BStraightLine'] = np.logical_and(np.abs(d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 10)
     d['BStraightLine'] = np.logical_and(d['BStraightLine'], d['vCar'] > 10)
     d['BCoasting'] = np.logical_and(d['rThrottle'] < 0.01, d['rBrake'] < 0.01)
     d['BCoasting'] = np.logical_and(d['BCoasting'], d['BStraightLine'])
@@ -76,25 +76,32 @@ def getRollOutCurve(dirPath):
     plt.xlabel('vCar [m/s]')
     plt.ylabel('gLong [m/s²]')
     plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
-    plt.ylim(np.min(d['gLong'][d['BCoasting']]) -1, 0)
+    plt.ylim(np.min(d['gLong'][d['BCoasting']])  * 1.1, 0)
 
     d['BGear'] = list()
     gLongPolyFit = list()
     QFuelPolyFit = list()
     vCar = np.linspace(0, np.max(d['vCar']) + 10, 100)
     NGear = np.linspace(0, np.max(d['Gear']), np.max(d['Gear'])+1)
+    # NGear = np.linspace(1, np.max(d['Gear']), np.max(d['Gear']))
 
     for i in range(0, np.max(d['Gear'])+1):
+    # for i in range(0, np.max(d['Gear'])):  # TODO: what if car can't coast in neutral?
         d['BGear'].append(np.logical_and(d['BCoasting'], d['Gear'] == NGear[i]))
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
-        gLongPolyFit.append(PolyFitTemp)
+        if i == 0:
+            PolyFitgLong = [0, 0, 0]
+            PolyFitQFuel = [0, 0, 0]
+        else:
+            PolyFitgLong, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
+            PolyFitQFuel, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
 
-        PolyFitTemp, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
-        QFuelPolyFit.append(PolyFitTemp)
+        gLongPolyFit.append(PolyFitgLong)
+        QFuelPolyFit.append(PolyFitQFuel)
 
-        plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]])
-        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i]))
+        if i > 0:
+            plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]])
+            plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i]))
 
     plt.savefig(resultsDirPath + '/roll_out_curve.png', dpi=300, orientation='landscape', progressive=True)
 
@@ -103,11 +110,12 @@ def getRollOutCurve(dirPath):
     plt.xlabel('vCar [m/s]')
     plt.ylabel('QFuel [g/s]')
     plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
-    plt.ylim(0, np.max(d['QFuel'][d['BCoasting']]) + 10)
+    plt.ylim(0, np.max(d['QFuel'][d['BCoasting']]) * 1.1)
 
     for i in range(0, np.max(d['Gear']) + 1):
-        plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
-        plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]))
+        if i > 0:
+            plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]])
+            plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]))
 
     plt.savefig(resultsDirPath + '/coasting_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
 
