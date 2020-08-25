@@ -403,7 +403,7 @@ def optimise(dirPath):
     print('VFuel :', np.round(VFuelMaxSave, 3))
 
     # bounds and constaints
-    bounds = [(0, 1)]*6
+    bounds = [(0, 1)]*len(NLiftEarliest)
     LiftPointsVsFuelCons = {'VFuelTGT': np.empty((len(VFuelTGT), 1)), 'LiftPoints': np.empty((len(VFuelTGT), len(NLiftEarliest)))}
 
     result = []
@@ -416,11 +416,11 @@ def optimise(dirPath):
         FuelConstraint = {'type': 'eq', 'fun': calcFuelConstraint, 'args': (VFuelPolyFit, VFuelConsTGT)}
 
         # actual optimisation
-        temp_result = scipy.optimize.minimize(objectiveLapTime, np.zeros(6), args=(tLapPolyFit, VFuelPolyFit), method='SLSQP', bounds=bounds, constraints=FuelConstraint,
+        temp_result = scipy.optimize.minimize(objectiveLapTime, np.zeros(len(NLiftEarliest)), args=(tLapPolyFit, VFuelPolyFit), method='SLSQP', bounds=bounds, constraints=FuelConstraint,
                                               options={'maxiter': 10000, 'ftol': 1e-09, 'iprint': 1, 'disp': False})
 
         result.append(temp_result)
-        fun.append(temp_result['fun'] + 0.029)
+        fun.append(temp_result['fun'])
 
         LiftPointsVsFuelCons['LiftPoints'][i, :] = result[i]['x']
 
