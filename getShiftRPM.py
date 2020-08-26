@@ -14,7 +14,7 @@ from libs.Car import Car
 
 
 def getShiftRPM(dirPath):
-    tReaction = 0.25  # TODO: as input to tune from GUI
+    tReaction = 0.3  # TODO: as input to tune from GUI
 
     root = tk.Tk()
     root.withdraw()
