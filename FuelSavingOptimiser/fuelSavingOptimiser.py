@@ -46,8 +46,11 @@ def stepFwds(x, n, LiftGear, car):
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n + 1] = temp['vCar'][n] + gLong * temp['dt'][n]
         temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
-        n = n + 1
+        n += 1
         i += 1
+
+        if n == len(temp['vCar'])-1:
+            break
 
     return temp
 
@@ -63,18 +66,20 @@ def calcLapTime(x):
     return x
 
 
-def stepBwds(x, i, LiftGear, car):
+def stepBwds(x, i, LiftGear, car, NApex_temp):
 
     n = i
     temp = copy.deepcopy(x)
 
-    while temp['vCar'][n] <= x['vCar'][n-1]:
+    if NApex_temp == len(temp['vCar'])-1:
+        NApex_temp = 0
+
+    while temp['vCar'][n] <= x['vCar'][n-1] and n > NApex_temp:
         vCar = temp['vCar'][n]
         gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
-        # temp['QFuel'][n] = 0.58
         temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
         n = n - 1
 
@@ -319,7 +324,12 @@ def optimise(dirPath):
     NLiftEarliest = np.array([], dtype='int32')
     c_temp = copy.deepcopy(c)
     for i in range(0, len(NWOT)):
-        c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])), LiftGear[i], car)
+        if i == 0:
+            NApex_temp = NApex[-1]
+        else:
+            NApex_temp = NApex[i-1]
+
+        c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])), LiftGear[i], car, NApex_temp)
         NLiftEarliest = np.append(NLiftEarliest, n)
 
     plt.figure()  # TODO: make plot nice
@@ -342,6 +352,7 @@ def optimise(dirPath):
 
     for i in range(0, len(NLiftEarliest)):
         for k in range(1, len(rLift)):
+            print('Lift zone: {} - rLift: {}'.format(i,k))
             tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
 
     # get fuel consumption and lap time differences compared to original lap
@@ -449,6 +460,21 @@ def optimise(dirPath):
     plt.savefig(resultsDirPath + '/rLift_vs_vFuelTGT.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
+    # different Lift Levels
+    NTemp = [0, 25, 75, 90, 95, 97, 99]
+
+    plt.figure()  # TODO: make plot nice
+    plt.plot(c['LapDistPct'], c['vCar'], label='Push')
+
+    for i in range(0, len(NTemp)):
+        _, _, R = costFcn( LiftPointsVsFuelCons['LiftPoints'][NTemp[i]], car, c, NLiftEarliest, NBrake, None, False, LiftGear)
+        plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[NTemp[i]], 2)))
+
+    plt.legend()
+    plt.grid()
+    plt.savefig(resultsDirPath + '/overview.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
+
     # get LapDistPct
     LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
     for i in range(0, len(NBrake)):  # lift zones
@@ -493,13 +519,18 @@ def optimise(dirPath):
     plt.scatter(d['x'][NLiftEarliest], d['y'][NLiftEarliest], label='NLiftEarliest')
     plt.scatter(d['x'][NWOT], d['y'][NWOT], label='NWOT')
     plt.legend()
+    for i in range(0, len(NBrake)):
+        plt.annotate(s='Zone {}'.format(i+1), xy=(d['x'][NBrake][i], d['y'][NBrake][i]),
+                     xycoords='data', xytext=(-10, -10), textcoords='offset points',
+                     horizontalalignment='right', verticalalignment='top')
     plt.grid()
     plt.savefig(resultsDirPath + '/trackMap.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] + 100 - c['LapDistPct'][NCut]
+    LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] * 100 - c['LapDistPct'][NCut]
     LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
     LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
+    LiftPointsVsFuelCons['ibtFileName'] = ibtPath
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)
