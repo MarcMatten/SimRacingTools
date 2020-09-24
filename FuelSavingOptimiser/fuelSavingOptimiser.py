@@ -39,7 +39,7 @@ def stepFwds(x, n, LiftGear, car):
     temp = copy.deepcopy(x)
     i = 0
 
-    while temp['vCar'][n] < temp['vCar'][n + 1]:
+    while temp['vCar'][n] < temp['vCar'][n + 1] and n+1 < len(temp['vCar']):
         vCar = temp['vCar'][n]
         gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
         ds = temp['ds'][n]
