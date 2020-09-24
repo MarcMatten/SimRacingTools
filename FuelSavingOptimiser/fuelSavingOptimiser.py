@@ -527,10 +527,14 @@ def optimise(dirPath):
     plt.savefig(resultsDirPath + '/trackMap.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'] * 100 - c['LapDistPct'][NCut]
+    LiftPointsVsFuelCons['LapDistPct'] = (LiftPointsVsFuelCons['LapDistPct'] + 1-c['LapDistPct'][NCut]) * 100
+    LiftPointsVsFuelCons['LapDistPct'][LiftPointsVsFuelCons['LapDistPct'] > 100] = LiftPointsVsFuelCons['LapDistPct'][LiftPointsVsFuelCons['LapDistPct'] > 100] - 100
     LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
     LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
     LiftPointsVsFuelCons['ibtFileName'] = ibtPath
+
+    LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'].transpose()
+    LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)
