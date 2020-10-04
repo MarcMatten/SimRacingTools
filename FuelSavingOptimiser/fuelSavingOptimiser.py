@@ -437,12 +437,15 @@ def optimise(dirPath):
 
 
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
+    LiftPointsVsFuelCons['tLapDelta'] = fun
 
+    tLapVFuelPolyFit, _ = scipy.optimize.curve_fit(maths.polyVal, LiftPointsVsFuelCons['VFuelTGT'], fun, [0] * 6)
     plt.figure()  # TODO: make plot nice
-    plt.title('Detla tLap vs VFuel')
+    plt.title('Delta tLap vs VFuel')
     plt.xlabel('VFuel [l]')
     plt.ylabel('Delta tLap [s]')
     plt.plot(LiftPointsVsFuelCons['VFuelTGT'], fun, label='Simulation')
+    plt.plot(LiftPointsVsFuelCons['VFuelTGT'], maths.polyVal(LiftPointsVsFuelCons['VFuelTGT'], tLapVFuelPolyFit), label='PolyFit')
     plt.grid()
     plt.legend()
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
@@ -532,6 +535,7 @@ def optimise(dirPath):
     LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
     LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
     LiftPointsVsFuelCons['ibtFileName'] = ibtPath
+    LiftPointsVsFuelCons['tLapVFuelPolyFit'] = tLapVFuelPolyFit
 
     LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'].transpose()
     LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
