@@ -506,6 +506,8 @@ def optimise(dirPath):
 
     LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'].transpose()
     LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
+    LiftPointsVsFuelCons['SFuelConfigCarName'] = carScreenNameShort
+    LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackDisplayShortName
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)
