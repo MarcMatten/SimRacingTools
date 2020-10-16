@@ -261,7 +261,7 @@ def optimise(dirPath):
                             break
 
                     break
-
+    plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
     del i, k, m, n, l, j
 
     NApex = np.flip(NApexNew)
@@ -298,6 +298,8 @@ def optimise(dirPath):
 
         c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85*(NApex[i]-NBrake[i])), LiftGear[i], car, NApex_temp)
         NLiftEarliest = np.append(NLiftEarliest, n)
+
+    NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
 
     plt.figure()  # TODO: make plot nice
     plt.title('Earliest Lift Points')
