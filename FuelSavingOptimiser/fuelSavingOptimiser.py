@@ -12,7 +12,6 @@ import scipy.signal
 from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
 
-rhoFuel = 0.75  # TODO can this be obtained from IBT file?
 nan = float('nan')
 
 
@@ -57,7 +56,7 @@ def stepFwds(x, n, LiftGear, car):
 
 def calcFuel(x):
     x['mFuel'] = np.cumsum(np.append(0, x['dt'] * x['QFuel'][0:-1]))/1000
-    x['VFuel'] = x['mFuel']/rhoFuel
+    x['VFuel'] = x['mFuel']/x['DriverInfo']['DriverCarFuelKgPerLtr']
     return x
 
 
@@ -182,6 +181,9 @@ def optimise(dirPath):
             if dNApex[i]:
                 NApex = np.delete(NApex, i+1)
 
+    print('NApex: ',  NApex)
+    print('sApex: ',  d['sLap'][NApex])
+
     plt.ioff()
     plt.figure()  # TODO: make plot nice
     plt.plot(d['sLap'], d['vCar'], 'k', label='Speed')
@@ -246,27 +248,52 @@ def optimise(dirPath):
     for i in range(0, len(NApex)):
         k = len(NApex) - 1 - i
         if NApex[k] > np.min(NBrake):
-            NApexNew.append(NApex[k])
+            NApexNew = np.append(NApexNew, NApex[k])
+            BNBrakeNew = False
+            BNWOTNew = False
 
             for j in range(0, len(NBrake)):
                 l = len(NBrake) - 1 - j
-                if NBrake[l] < NApex[k]:
-                    NBrakeNew.append(NBrake[l])
+                if NBrake[l] < NApexNew[-1]:
+                    if not BNBrakeNew:
+                        if k > 0:
+                            if not NBrake[l] < NApex[k - 1]:
+                                NBrakeNew = np.append(NBrakeNew, NBrake[l])
+                                BNBrakeNew = True
+                            else:
+                                NApexNew = np.delete(NApexNew, len(NApexNew) - 1)
+                                break
+                        else:
+                            NBrakeNew = np.append(NBrakeNew, NBrake[l])
+                            BNBrakeNew = True
 
                     for m in range(0, len(NWOT)):
                         n = len(NWOT) - 1 - m
-                        if NWOT[n] < NBrake[l]:
-                            NWOTNew.append(NWOT[n])
+                        if NWOT[n] < NApexNew[-1]:
+                            if not BNWOTNew:
+                                if n > 0 and k > 0:
+                                    if not NWOT[n] < NApex[k - 1]:
+                                        NWOTNew = np.append(NWOTNew, NWOT[n])
+                                        BNWOTNew = True
+                                        break
+                                    else:
+                                        NApexNew = np.delete(NApexNew, len(NApexNew) - 1)
+                                        break
+                                else:
+                                    NWOTNew = np.append(NWOTNew, NWOT[n])
+                                    BNWOTNew = True
+                                    break
+                        # else:
+                        #     NWOTNew = np.append(NWOTNew, NWOT[n])
+                        #     break
 
-                            break
 
-                    break
     plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
     del i, k, m, n, l, j
 
-    NApex = np.flip(NApexNew)
-    NBrake = np.flip(NBrakeNew)
-    NWOT = np.flip(NWOTNew)
+    NApex = np.flip(NApexNew).astype(int)
+    NBrake = np.flip(NBrakeNew).astype(int)
+    NWOT = np.flip(NWOTNew).astype(int)
 
     LiftGear = c['Gear'][NBrake]
 
@@ -283,7 +310,17 @@ def optimise(dirPath):
     plt.ylabel('vCar [m/s]')
     plt.savefig(resultsDirPath + '/sections.png', dpi=300, orientation='landscape', progressive=True)
 
+    print('NApex: ', NApex)
+    print('sApex: ', c['sLap'][NApex])
+    print('NWOT: ', NWOT)
+    print('sWOT: ', c['sLap'][NWOT])
+    print('NBrake: ', NBrake)
+    print('sBrake: ', c['sLap'][NBrake])
+
+
     print('\nPush Lap:')
+
+    # TODO: cald these reference values
     print('LapTime :', np.round(c['tLap'][-1], 3))
     print('VFuel :', np.round(c['VFuel'][-1], 3))
 
@@ -321,7 +358,7 @@ def optimise(dirPath):
 
     for i in range(0, len(NLiftEarliest)):
         for k in range(1, len(rLift)):
-            print('Lift zone: {} - rLift: {}'.format(i,k))
+            print('Lift zone: {} - rLift: {}'.format(i, k))
             tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
 
     # get fuel consumption and lap time differences compared to original lap
@@ -404,7 +441,6 @@ def optimise(dirPath):
 
         LiftPointsVsFuelCons['LiftPoints'][i, :] = result[i]['x']
 
-
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
     LiftPointsVsFuelCons['tLapDelta'] = fun
 
@@ -439,7 +475,7 @@ def optimise(dirPath):
     plt.plot(c['LapDistPct'], c['vCar'], label='Push')
 
     for i in range(0, len(NTemp)):
-        _, _, R = costFcn( LiftPointsVsFuelCons['LiftPoints'][NTemp[i]], car, c, NLiftEarliest, NBrake, None, False, LiftGear)
+        _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][NTemp[i]], car, c, NLiftEarliest, NBrake, None, False, LiftGear)
         plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[NTemp[i]], 2)))
 
     plt.legend()
