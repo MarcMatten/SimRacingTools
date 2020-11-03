@@ -117,14 +117,14 @@ def saveJson(x, path):
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
 
 
-def optimise(dirPath):
+def optimise(dirPath, TelemPath):
     BPlot = True
 
     root = tk.Tk()
     root.withdraw()
     
     # get ibt path
-    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+    ibtPath = filedialog.askopenfilename(initialdir=TelemPath, title="Select IBT file",
                                          filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
     if not ibtPath:

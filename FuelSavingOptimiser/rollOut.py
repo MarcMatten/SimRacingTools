@@ -13,12 +13,12 @@ from functionalities.libs import maths, importIBT, importExport
 from libs.Car import Car
 
 
-def getRollOutCurve(dirPath):
+def getRollOutCurve(dirPath, TelemPath):
     root = tk.Tk()
     root.withdraw()
 
     # get ibt path
-    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+    ibtPath = filedialog.askopenfilename(initialdir=TelemPath, title="Select IBT file",
                                          filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
     if not ibtPath:

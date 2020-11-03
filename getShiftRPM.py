@@ -13,14 +13,14 @@ from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
 
 
-def getShiftRPM(dirPath):
+def getShiftRPM(dirPath, TelemPath):
     tReaction = 0.3  # TODO: as input to tune from GUI
 
     root = tk.Tk()
     root.withdraw()
 
     # get ibt path
-    ibtPath = filedialog.askopenfilename(initialdir=dirPath, title="Select IBT file",
+    ibtPath = filedialog.askopenfilename(initialdir=TelemPath, title="Select IBT file",
                                          filetypes=(("IBT files", "*.ibt"), ("all files", "*.*")))
 
     if not ibtPath:
