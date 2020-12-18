@@ -68,8 +68,8 @@ def getShiftRPM(dirPath, TelemPath):
         os.mkdir(resultsDirPath)
 
     d['BStraightLine'] = np.logical_and((d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03, np.abs(d['vCar']) > 10)
-    d['BWOT'] = np.logical_and((d['rThrottle']) > 0.99, np.abs(d['rBrake']) < 0.01)
-    d['BCoasting'] = np.logical_and((d['rThrottle']) < 0.01, np.abs(d['rBrake']) < 0.01)
+    d['BWOT'] = np.logical_and((d['rThrottle']) == 1, np.abs(d['rBrake']) == 0)
+    d['BCoasting'] = np.logical_and((d['rThrottle']) == 0 , np.abs(d['rBrake']) == 0)
     d['BShiftRPM'] = np.logical_and(d['BStraightLine'], d['BWOT'])
     d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.3)
 
@@ -78,7 +78,8 @@ def getShiftRPM(dirPath, TelemPath):
     plt.ioff()
     plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
     plt.grid()
-    plt.scatter(d['vCar'][d['BShiftRPM']], d['gLong'][d['BShiftRPM']])
+    cmap = plt.get_cmap("tab10")
+    # plt.scatter(d['vCar'][d['BShiftRPM']], d['gLong'][d['BShiftRPM']])
     plt.xlabel('vCar [m/s]')
     plt.ylabel('gLong [m/s²]')
     plt.xlim(0, np.max(d['vCar'][d['BShiftRPM']]) + 5)
@@ -116,8 +117,8 @@ def getShiftRPM(dirPath, TelemPath):
         vCarMax.append(np.max(d['vCar'][d['BRPMRange'][i]]))
         vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
 
-        plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]])
-        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]))
+        plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]], marker='.', zorder=1, color=cmap(i))
+        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]), label='Gear {}'.format(i+1), zorder=2,color=cmap(i+2))
 
     vCarShiftOptimal = []
     vCarShiftTarget = []
@@ -131,13 +132,14 @@ def getShiftRPM(dirPath, TelemPath):
         vCarShiftOptimal.append(np.min([result[0], vCarMax[k]]))
         vCarShiftTarget.append(vCarShiftOptimal[k] - tReaction * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
 
-        plt.scatter(vCarShiftOptimal[k], f1(vCarShiftOptimal[k]), marker='o', color='black')
-        plt.scatter(vCarShiftTarget[k], f1(vCarShiftTarget[k]), marker='o', color='red')
+        plt.scatter(vCarShiftOptimal[k], f1(vCarShiftOptimal[k]), marker='o', color='black', zorder=99)
+        plt.scatter(vCarShiftTarget[k], f1(vCarShiftTarget[k]), marker='o', color='red', zorder=99)
 
+    plt.legend()
     plt.savefig(resultsDirPath + '/gLong_vs_vCar.png', dpi=300, orientation='landscape', progressive=True)
 
     plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
-    plt.scatter(d['vCar'][d['BShiftRPM']], d['RPM'][d['BShiftRPM']])
+    plt.scatter(d['vCar'][d['BShiftRPM']], d['RPM'][d['BShiftRPM']], marker=".", zorder=0, color='k')
     plt.grid()
     plt.xlabel('vCar [m/s]')
     plt.ylabel('nMotor [RPM]')
@@ -149,14 +151,15 @@ def getShiftRPM(dirPath, TelemPath):
 
     for i in range(0, np.max(d['Gear'])):
         vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
-        plt.plot(vCar, maths.polyVal(vCar, RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
+        plt.plot(vCar, maths.polyVal(vCar, RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]), label='Gear {}'.format(i+1), zorder=1)
 
         if i < np.max(d['Gear']) - 1:
             nMotorShiftOptimal.append(maths.polyVal(vCarShiftOptimal[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
             nMotorShiftTarget.append(maths.polyVal(vCarShiftTarget[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
-            plt.scatter(vCarShiftOptimal[i], nMotorShiftOptimal[i], marker='o', color='black')
-            plt.scatter(vCarShiftTarget[i], nMotorShiftTarget[i], marker='o', color='red')
+            plt.scatter(vCarShiftOptimal[i], nMotorShiftOptimal[i], marker='o', color='black', zorder=99)
+            plt.scatter(vCarShiftTarget[i], nMotorShiftTarget[i], marker='o', color='red', zorder=99)
 
+    plt.legend()
     plt.savefig(resultsDirPath + '/RPM_vs_vCar.png', dpi=300, orientation='landscape', progressive=True)
 
     # save so car file
