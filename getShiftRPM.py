@@ -44,7 +44,7 @@ def getShiftRPM(dirPath, TelemPath):
         car.load(carFilePath)
     else:
         tempDB = RTDB.RTDB()
-        tempDB.initialise(d, False)
+        tempDB.initialise(d, False, False)
         UserShiftRPM = [0] * 7
         UserShiftFlag = [False] * 7
 
@@ -52,7 +52,7 @@ def getShiftRPM(dirPath, TelemPath):
             UserShiftRPM[k] = d['DriverInfo']['DriverCarSLShiftRPM']
             UserShiftFlag[k] = True
 
-        tempDB.initialise({'UserShiftRPM': UserShiftRPM, 'UpshiftStrategy': 5, 'UserShiftFlag': UserShiftFlag}, False)
+        tempDB.initialise({'UserShiftRPM': UserShiftRPM, 'UpshiftStrategy': 5, 'UserShiftFlag': UserShiftFlag}, False, False)
 
         car.createCar(tempDB, var_headers_names=var_headers_names)
 
