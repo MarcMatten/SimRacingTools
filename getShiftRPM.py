@@ -72,8 +72,8 @@ def getShiftRPM(dirPath, TelemPath):
     d['BCoasting'] = np.logical_and((d['rThrottle']) == 0 , np.abs(d['rBrake']) == 0)
     d['BShiftRPM'] = np.logical_and(d['BStraightLine'], d['BWOT'])
     d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.3)
-
-    minRPM = 2000
+    minRPM = 0.7 * car.iRShiftRPM[0]
+    d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['RPM'] > minRPM)
 
     plt.ioff()
     plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
@@ -115,7 +115,7 @@ def getShiftRPM(dirPath, TelemPath):
 
         vCarMin.append(np.min(d['vCar'][d['BRPMRange'][i]]))
         vCarMax.append(np.max(d['vCar'][d['BRPMRange'][i]]))
-        vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
+        vCar = np.linspace(vCarMin[i] - 5, vCarMax[i] + 5, 100)
 
         plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]], marker='.', zorder=1, color=cmap(i))
         plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]), label='Gear {}'.format(i+1), zorder=2,color=cmap(i+2))
