@@ -134,7 +134,7 @@ def optimise(dirPath, TelemPath):
     # imoport ibt file
     d, _ = importIBT.importIBT(ibtPath,
                                lap='f',
-                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY' ,'Yaw', 'Gear'],
+                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY','Yaw', 'Gear'],
                                channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
 
     DriverCarIdx = d['DriverInfo']['DriverCarIdx']
@@ -203,7 +203,7 @@ def optimise(dirPath, TelemPath):
     temp = copy.deepcopy(d)
     c = {}
     keys = list(temp.keys())
-    NCut = len(temp[keys[0]][NApex[0]:-1])
+    NCut = len(temp[keys[10]][NApex[0]:-1])
 
     for i in range(0, len(temp)):
         if keys[i] == 'tLap':
@@ -443,6 +443,7 @@ def optimise(dirPath, TelemPath):
 
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
     LiftPointsVsFuelCons['tLapDelta'] = fun
+    LiftPointsVsFuelCons['LapDistPctWOT'] = c['LapDistPct'][NWOT]
 
     tLapVFuelPolyFit, _ = scipy.optimize.curve_fit(maths.polyVal, LiftPointsVsFuelCons['VFuelTGT'], fun, [0] * 6)
     plt.figure()  # TODO: make plot nice
@@ -483,14 +484,16 @@ def optimise(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/overview.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    # get LapDistPct
+    # get LapDistPct and VFuel a Lift Point
     LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    LiftPointsVsFuelCons['VFuelLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
     for i in range(0, len(NBrake)):  # lift zones
         # flip because x data must be monotonically increasing
         x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
         y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
         for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
             LiftPointsVsFuelCons['LapDistPct'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
+            LiftPointsVsFuelCons['VFuelLift'][k, i] = np.interp(LiftPointsVsFuelCons['LapDistPct'][k, i], d['LapDistPct'], d['VFuel'])
 
     NApex = NApex + len(d['vCar']) - NCut - 1
     NApex[NApex > len(d['vCar'])] = NApex[NApex > len(d['vCar'])] - len(d['vCar']) + 1
