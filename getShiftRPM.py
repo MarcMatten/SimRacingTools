@@ -92,6 +92,7 @@ def getShiftRPM(dirPath, TelemPath):
     vCarMin = list()
     vCarMax = list()
     maxRPM = list()
+    vCarMaxgLong = list()
 
     NGear = np.linspace(1, np.max(d['Gear']), np.max(d['Gear']))
 
@@ -100,9 +101,12 @@ def getShiftRPM(dirPath, TelemPath):
         d['BGear'].append(np.logical_and(d['BShiftRPM'], d['Gear'] == NGear[i]))
 
         maxRPM.append(np.max(d['RPM'][d['BGear'][i]]))
+        vCarTemp = d['vCar'][d['BGear'][i]]
+        vCarMaxgLong.append(vCarTemp[np.argmax(d['gLong'][d['BGear'][i]])])
 
         tempBRPMRange = np.logical_and(d['BGear'][i], d['RPM'] > minRPM)
         tempBRPMRange = np.logical_and(tempBRPMRange, d['RPM'] < maxRPM[i])
+        tempBRPMRange = np.logical_and(tempBRPMRange, d['vCar'] > vCarMaxgLong[i])
         tempBRPMRange = np.logical_and(tempBRPMRange, filters.movingAverage(d['EngineWarnings'], 6) < 1)
 
         d['BRPMRange'].append(tempBRPMRange)
