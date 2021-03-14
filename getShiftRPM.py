@@ -29,7 +29,7 @@ def getShiftRPM(dirPath, TelemPath):
 
     # imoport ibt file
     d, var_headers_names = importIBT.importIBT(ibtPath,
-                                               channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings', 'SessionTime'],
+                                               channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings', 'SessionTime', 'vWheelRL', 'vWheelRR', 'vCarX'],
                                                channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
 
     setupName = d['DriverInfo']['DriverSetupName']
@@ -93,6 +93,8 @@ def getShiftRPM(dirPath, TelemPath):
     vCarMax = list()
     maxRPM = list()
     vCarMaxgLong = list()
+    rGearRatioList = list()
+    vCarList = list()
 
     NGear = np.linspace(1, np.max(d['Gear']), np.max(d['Gear']))
 
@@ -123,6 +125,11 @@ def getShiftRPM(dirPath, TelemPath):
 
         plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]], marker='.', zorder=1, color=cmap(i))
         plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]), label='Gear {}'.format(i+1), zorder=2,color=cmap(i+2))
+
+        # Gear Ratio
+        vCarList.append([d['vCar'][d['BRPMRange'][i]]])
+        rGearRatioList.append([d['RPM'][d['BRPMRange'][i]] / 60 * np.pi / ((d['vWheelRL'][d['BRPMRange'][i]] + d['vWheelRR'][d['BRPMRange'][i]]) / 2 / 0.3)])
+
 
     vCarShiftOptimal = []
     vCarShiftTarget = []
@@ -166,8 +173,22 @@ def getShiftRPM(dirPath, TelemPath):
     plt.legend()
     plt.savefig(resultsDirPath + '/RPM_vs_vCar.png', dpi=300, orientation='landscape', progressive=True)
 
+    # Gear Ratios
+    rGearRatios = list()
+    plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
+    plt.grid()
+    plt.xlabel('vCar [m/s]')
+    plt.ylabel('rGearRatio [-]')
+    for i in range(len(rGearRatioList)):
+        rGearRatios.append(np.mean(rGearRatioList[i]))
+        plt.scatter(vCarList[i], rGearRatioList[i], zorder=99, label='Gear {}: {}'.format(i+1, rGearRatios[i]))
+
+    plt.legend()
+    plt.savefig(resultsDirPath + '/rGearRatio.png', dpi=300, orientation='landscape', progressive=True)
+
     # save so car file
     car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], setupName, d['CarSetup'])
+    car.setGearRatios(rGearRatios)
     car.save(carFilePath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
