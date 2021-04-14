@@ -27,7 +27,7 @@ def getRollOutCurve(dirPath, TelemPath):
 
     # imoport ibt file
     d, var_headers_names = importIBT.importIBT(ibtPath,
-                                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel', 'rClutch'],
+                                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel', 'rClutch', 'vWheelRL', 'vWheelRR', 'vCarX'],
                                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')
 
     setupName = d['DriverInfo']['DriverSetupName']
@@ -82,35 +82,35 @@ def getRollOutCurve(dirPath, TelemPath):
     plt.xlabel('vCar [m/s]')
     plt.ylabel('gLong [m/s²]')
     plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
-    plt.ylim(np.min(d['gLong'][d['BCoasting']])  * 1.1, 0)
+    plt.ylim(np.min(d['gLong'][d['BCoasting']]) * 1.1, 0)
 
-    d['BGear'] = list()
-    gLongPolyFit = list()
-    QFuelPolyFit = list()
+    NGearMax = np.max(d['Gear'])
+    d['BGear'] = [None] * (NGearMax + 1)
+    gLongPolyFit = [None] * (NGearMax + 1)
+    QFuelPolyFit = [None] * (NGearMax + 1)
     vCar = np.linspace(0, np.max(d['vCar']) + 10, 100)
-    # NGear = np.linspace(0, np.max(d['Gear']), np.max(d['Gear'])+1)
-    NGear = np.linspace(1, np.max(d['Gear']), np.max(d['Gear']))
+    NGear = np.linspace(0, np.max(d['Gear']), np.max(d['Gear'])+1, dtype=int)
+    rGearRatioList = [None] * (NGearMax + 1)
+    vCarList = [None] * (NGearMax + 1)
 
-    # for i in range(0, np.max(d['Gear'])+1):
-    for i in range(0, np.max(d['Gear'])):  # TODO: what if car can't coast in neutral?
-        # d['BGear'].append(np.logical_and(d['BCoastingInGear'], filters.movingAverage(d['Gear'], 500) == NGear[i]))
-        d['BGear'].append(np.logical_and(d['BCoastingInGear'], d['Gear'] == NGear[i]))
+    for i in range(0, np.max(d['Gear'])+1):
+        d['BGear'][i] = np.logical_and(d['BCoastingInGear'], d['Gear'] == NGear[i])
 
-        # if i == 0:
-        #     PolyFitgLong = [0, 0, 0]
-        #     PolyFitQFuel = [0, 0, 0]
-        # else:
-        #     PolyFitgLong, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
-        #     PolyFitQFuel, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
-        PolyFitgLong, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
-        PolyFitQFuel, temp = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
+        if i == 0:
+            gLongPolyFit[i] = [0, 0, 0]
+            QFuelPolyFit[i] = [0, 0, 0]
+        else:
+            gLongPolyFit[i], _ = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
+            QFuelPolyFit[i], _ = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
 
-        gLongPolyFit.append(PolyFitgLong)
-        QFuelPolyFit.append(PolyFitQFuel)
+            # Gear Ratio
+            vCarList[i] = [d['vCar'][d['BGear'][i]]]
+            rGearRatioList[i] = [d['RPM'][d['BGear'][i]] / 60 * np.pi / ((d['vWheelRL'][d['BGear'][i]] + d['vWheelRR'][d['BGear'][i]]) / 2 / 0.3)]
 
-        # if i > 0:
-        plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], color=cmap(i), marker=".")
-        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i]), color=cmap(i+1), label='Gear {}'.format(i+1))
+        # plot gLong vs vCar
+        if i > 0:
+            plt.scatter(d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], color=cmap(i), marker=".")
+            plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i]), color=cmap(i+1), label='Gear {}'.format(i))
 
     plt.legend()
     plt.savefig(resultsDirPath + '/roll_out_curve.png', dpi=300, orientation='landscape', progressive=True)
@@ -122,17 +122,34 @@ def getRollOutCurve(dirPath, TelemPath):
     plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
     plt.ylim(0, np.max(d['QFuel'][d['BCoasting']]) * 1.5)
 
-    # for i in range(0, np.max(d['Gear']) + 1):
-    for i in range(0, np.max(d['Gear'])):
-        # if i > 0:
-        plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], color=cmap(i), marker=".")
-        plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]), color=cmap(i+1), label='Gear {}'.format(i+1))
+    # plot QFuel vs vCar
+    for i in range(0, NGearMax + 1):
+        if i > 0 or any(d['BGear'][i]):
+            plt.scatter(d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], color=cmap(i), marker=".")
+            plt.plot(vCar, maths.polyVal(vCar, QFuelPolyFit[i]), color=cmap(i+1), label='Gear {}'.format(i))
 
     plt.legend()
     plt.savefig(resultsDirPath + '/coasting_fuel_consumption.png', dpi=300, orientation='landscape', progressive=True)
 
+    # Gear Ratios
+    rGearRatios = [None] * (NGearMax + 1)
+    plt.figure()  # TODO: make plot nice (legend but only for black and red dots)
+    plt.grid()
+    plt.xlabel('vCar [m/s]')
+    plt.ylabel('rGearRatio [-]')
+    for i in range(len(rGearRatioList)):
+        if None is rGearRatioList[i]:
+            rGearRatios[i] = None
+        else:
+            rGearRatios[i] = np.mean(rGearRatioList[i])
+            plt.scatter(vCarList[i], rGearRatioList[i], zorder=99, label='Gear {}: {}'.format(i, rGearRatios[i]), marker=".")
+
+    plt.legend()
+    plt.savefig(resultsDirPath + '/rGearRatio.png', dpi=300, orientation='landscape', progressive=True)
+
     # save so car file
     car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear, setupName, d['CarSetup'])
+    car.setGearRatios(rGearRatios)
     car.save(carFilePath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')

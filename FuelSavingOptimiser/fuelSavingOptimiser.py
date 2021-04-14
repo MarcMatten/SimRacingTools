@@ -22,8 +22,12 @@ def costFcn(rLift, car, *args):
     VFuelTgt = args[3]  # fuel target for optimistion mode
     optim = args[4]  # optimisation mode -> calc error?
     LiftGear = args[5]
+    if len(args) >= 7:
+        NReference = args[6]
+    C['NLift'] = np.array([], dtype=int)
     for i in range(0, len(NLiftEarliest)):
-        C = stepFwds(C, NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i])), LiftGear[i], car)
+        C['NLift'] = np.append(C['NLift'], NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i])))
+        C = stepFwds(C, C['NLift'][i], LiftGear[i], car)
 
     C = calcFuel(C)
     C = calcLapTime(C)
@@ -31,6 +35,9 @@ def costFcn(rLift, car, *args):
     if optim:
         return C['tLap'][-1] + abs(VFuelTgt - C['VFuel'][-1]) * 1000
     else:
+        if len(args) >= 7:
+            C['VFuelLift'] = C['VFuel'][C['NLift']]
+            C['VFuelReference'] = C['VFuel'][NReference]
         return C['tLap'][-1], C['VFuel'][-1], C
 
 
@@ -172,6 +179,8 @@ def optimise(dirPath, TelemPath):
 
     d['x'], d['y'] = maths.createTrack(d)
 
+    print('\nPreperations done ... Analysing track')
+
     # find apex points
     NApex = scipy.signal.find_peaks(200-d['vCar'], height=10, prominence=1)
     NApex = NApex[0]
@@ -182,10 +191,15 @@ def optimise(dirPath, TelemPath):
                 NApex = np.delete(NApex, i+1)
 
     print('NApex: ',  NApex)
-    print('sApex: ',  d['sLap'][NApex])
+    print('LapDistPctApex: ',  d['LapDistPct'][NApex])
+
+    print('\tFound {} apex points'.format(len(NApex)))
+    # print('NApex: ',  NApex)
+    # print('dNApex: ',  np.diff(NApex))
 
     plt.ioff()
-    plt.figure()  # TODO: make plot nice
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.plot(d['sLap'], d['vCar'], 'k', label='Speed')
     plt.plot(d['sLap'], d['rThrottle'] * 10, 'g', label='rThrottle')
     plt.plot(d['sLap'], d['rBrake'] * 10, 'r', label='rBrake')
@@ -198,7 +212,10 @@ def optimise(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/apexPoints.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
+    d['NApex'] = NApex
+
     # cut lap at first apex
+    print('\tCutting data at {} m'.format(np.round(d['sLap'][NApex][0], 1)))
     # create new data dict for cut lap --> c
     temp = copy.deepcopy(d)
     c = {}
@@ -228,7 +245,7 @@ def optimise(dirPath, TelemPath):
     c['dLapDistPct'] = np.diff(c['LapDistPct'])
     c = calcFuel(c)
     c = calcLapTime(c)
-    NApex = NApex[1:len(NApex)] - NApex[0]
+    NApex = NApex[1:] - NApex[0]
     NApex = np.append(NApex, len(c['tLap'])-1)  # fake apex for last index
     c['rBrake'][0] = 1  # fudging around to find the first brake point
 
@@ -239,6 +256,8 @@ def optimise(dirPath, TelemPath):
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
     NBrake = NBrake[1]['right_edges']
+
+    c['NApex'] = NApex
 
     # elimination obsolete points
     NApexNew = []
@@ -288,20 +307,30 @@ def optimise(dirPath, TelemPath):
                         #     break
 
 
-    plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
+    # plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
     del i, k, m, n, l, j
+
+    print('\tIdentified reference points')
 
     NApex = np.flip(NApexNew).astype(int)
     NBrake = np.flip(NBrakeNew).astype(int)
+    NReference = np.array(NBrake + (NApex - NBrake) * 0.5, dtype=int)
     NWOT = np.flip(NWOTNew).astype(int)
+
+    c['NApex'] = NApex
+    c['NBrake'] = NBrake
+    c['NReference'] = NReference
+    c['NWOT'] = NWOT
 
     LiftGear = c['Gear'][NBrake]
 
-    plt.figure()  # TODO: make plot nice
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.plot(c['sLap'], c['vCar'], label='Speed - Push Lap')
     plt.scatter(c['sLap'][NWOT], c['vCar'][NWOT], label='Full Throttle Points')
     plt.scatter(c['sLap'][NBrake], c['vCar'][NBrake], label='Brake Points')
     plt.scatter(c['sLap'][NApex], c['vCar'][NApex], label='Apex Points')
+    plt.scatter(c['sLap'][NReference], c['vCar'][NReference], label='Reference Points')
 
     plt.grid()
     plt.legend()
@@ -310,21 +339,23 @@ def optimise(dirPath, TelemPath):
     plt.ylabel('vCar [m/s]')
     plt.savefig(resultsDirPath + '/sections.png', dpi=300, orientation='landscape', progressive=True)
 
-    print('NApex: ', NApex)
-    print('sApex: ', c['sLap'][NApex])
-    print('NWOT: ', NWOT)
-    print('sWOT: ', c['sLap'][NWOT])
-    print('NBrake: ', NBrake)
-    print('sBrake: ', c['sLap'][NBrake])
+    # print('NApex: ', NApex)
+    # print('sApex: ', c['sLap'][NApex])
+    # print('NWOT: ', NWOT)
+    # print('sWOT: ', c['sLap'][NWOT])
+    # print('NBrake: ', NBrake)
+    # print('sBrake: ', c['sLap'][NBrake])
 
 
-    print('\nPush Lap:')
+    print('\nOptimisation Boundaries')
+    print('\n\tPush Lap')
 
     # TODO: cald these reference values
-    print('LapTime :', np.round(c['tLap'][-1], 3))
-    print('VFuel :', np.round(c['VFuel'][-1], 3))
+    print('\tLapTime:\t{} s'.format(np.round(c['tLap'][-1], 3)))
+    print('\tVFuel:\t\t{} l'.format(np.round(c['VFuel'][-1], 3)))
 
     # Find earliest lift points. Assumption: arriving at apex with apex speed but no brake application
+    print('\n\tCalculating Lifting')
     NLiftEarliest = np.array([], dtype='int32')
     c_temp = copy.deepcopy(c)
     for i in range(0, len(NWOT)):
@@ -338,7 +369,8 @@ def optimise(dirPath, TelemPath):
 
     NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
 
-    plt.figure()  # TODO: make plot nice
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.title('Earliest Lift Points')
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
@@ -357,8 +389,9 @@ def optimise(dirPath, TelemPath):
     tLapRLift = np.zeros((len(NLiftEarliest), len(rLift)))
 
     for i in range(0, len(NLiftEarliest)):
+        print('\t\tLift zone: {}/{}'.format(i+1, len(NLiftEarliest)))
         for k in range(1, len(rLift)):
-            print('Lift zone: {} - rLift: {}'.format(i, k))
+            #print('Lift zone: {} - rLift: {}'.format(i, k))
             tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
 
     # get fuel consumption and lap time differences compared to original lap
@@ -389,7 +422,8 @@ def optimise(dirPath, TelemPath):
         VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, f, [0]*6)
 
         if BPlot:  # TODO: save these plots in a subdirectory
-            plt.figure()  # TODO: make plot nice
+            plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+            plt.tight_layout()
             plt.title('Lap Time Loss - Lift Zone ' + str(i + 1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
@@ -399,7 +433,8 @@ def optimise(dirPath, TelemPath):
             plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
-            plt.figure()  # TODO: make plot nice
+            plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+            plt.tight_layout()
             plt.title('Fuel Save - Lift Zone ' + str(i + 1))
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
@@ -415,11 +450,13 @@ def optimise(dirPath, TelemPath):
     # optimisation for 100 steps between maximum lift and push
     VFuelTGT = np.linspace(VFuelMaxSave, c['VFuel'][-1], 100)
 
-    print('\nMaximum Lift:')
-    print('LapTime :', np.round(tLapMaxSave, 3))
-    print('VFuel :', np.round(VFuelMaxSave, 3))
+    print('\n\tMaximum Lift:')
+    print('\tLapTime:\t{} s'.format(np.round(tLapMaxSave, 3)))
+    print('\tVFuel:\t\t{} l'.format(np.round(VFuelMaxSave, 3)))
 
     # bounds and constaints
+
+    print('\n\tOptimising Fuel Saving...')
     bounds = [(0, 1)]*len(NLiftEarliest)
     LiftPointsVsFuelCons = {'VFuelTGT': np.empty((len(VFuelTGT), 1)), 'LiftPoints': np.empty((len(VFuelTGT), len(NLiftEarliest)))}
 
@@ -443,10 +480,11 @@ def optimise(dirPath, TelemPath):
 
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
     LiftPointsVsFuelCons['tLapDelta'] = fun
-    LiftPointsVsFuelCons['LapDistPctWOT'] = c['LapDistPct'][NWOT]
 
     tLapVFuelPolyFit, _ = scipy.optimize.curve_fit(maths.polyVal, LiftPointsVsFuelCons['VFuelTGT'], fun, [0] * 6)
-    plt.figure()  # TODO: make plot nice
+
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.title('Delta tLap vs VFuel')
     plt.xlabel('VFuel [l]')
     plt.ylabel('Delta tLap [s]')
@@ -457,7 +495,8 @@ def optimise(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    plt.figure()  # TODO: make plot nice
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.title('rLift vs VFuelTGT')
     plt.xlabel('VFuelTGT [l]')
     plt.ylabel('rLift [-]')
@@ -469,31 +508,77 @@ def optimise(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/rLift_vs_vFuelTGT.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
+    print('\t\tOptimisation complete')
+
     # different Lift Levels
-    NTemp = [0, 25, 75, 90, 95, 97, 99]
+    print('\n\tCalculating Lift Points and Consumption')
+    NTempPlot = [0, 25, 75, 90, 95, 97, 99]
 
-    plt.figure()  # TODO: make plot nice
-    plt.plot(c['LapDistPct'], c['vCar'], label='Push')
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
+    plt.plot(c['LapDistPct'], c['VFuel'], label='Push')
 
-    for i in range(0, len(NTemp)):
-        _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][NTemp[i]], car, c, NLiftEarliest, NBrake, None, False, LiftGear)
-        plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[NTemp[i]], 2)))
+    LiftPointsVsFuelCons['VFuelLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    LiftPointsVsFuelCons['VFuelReference'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    LiftPointsVsFuelCons['VFuelBudget'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    LiftPointsVsFuelCons['LapDistPctLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+
+    # NSplit = len(d['vCar']) - NCut - 1
+    for i in range(0, len(VFuelTGT)):
+        _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][i], car, c, NLiftEarliest, NBrake, None, False, LiftGear, NReference)
+
+        # VFuel at lift points
+        VFuelLift_temp = R['VFuel'][R['NLift']]
+        VFuelLift_temp[:-1] = VFuelLift_temp[:-1] + (R['VFuel'][-1] - R['VFuel'][NCut])
+        VFuelLift_temp[-1] = VFuelLift_temp[-1] - R['VFuel'][NCut]
+        LiftPointsVsFuelCons['VFuelLift'][i] = np.roll(VFuelLift_temp, 1)
+
+        # VFuel Budget
+        VFuelReference_temp = R['VFuelReference'][1:]
+        VFuelReference_temp = np.append(VFuelReference_temp, [R['VFuel'][-1] + R['VFuelReference'][0]])
+        LiftPointsVsFuelCons['VFuelBudget'][i] = np.roll(VFuelReference_temp - R['VFuelLift'], 1)
+
+        # VFuel at reference points
+        VFuelLift_temp = R['VFuel'][NReference]
+        VFuelLift_temp[:-1] = VFuelLift_temp[:-1] + (R['VFuel'][-1] - R['VFuel'][NCut])
+        VFuelLift_temp[-1] = VFuelLift_temp[-1] - R['VFuel'][NCut]
+        LiftPointsVsFuelCons['VFuelReference'][i] = np.roll(VFuelLift_temp, 1)
+
+        # LapDistPct at lift points
+        LapDistPctLift_temp = R['LapDistPct'][R['NLift']]
+        LapDistPctLift_temp[:-1] = LapDistPctLift_temp[:-1] + (R['LapDistPct'][-1] - R['LapDistPct'][NCut])
+        LapDistPctLift_temp[-1] = LapDistPctLift_temp[-1] - R['LapDistPct'][NCut]
+        LiftPointsVsFuelCons['LapDistPctLift'][i] = np.roll(LapDistPctLift_temp, 1)
+
+        if i in NTempPlot:
+            plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[i], 2)))
+            # plt.scatter(R['LapDistPct'][NSplit], R['vCar'][NSplit], label=str(round(VFuelTGT[i], 2)))
+            # plt.plot(R['LapDisVFuelReference_temptPct'], R['VFuel'], label=str(round(VFuelTGT[i], 2)))
+            # plt.scatter(R['LapDistPct'][R['NLift']], R['VFuel'][R['NLift']], label=str(round(VFuelTGT[i], 2)))
 
     plt.legend()
     plt.grid()
     plt.savefig(resultsDirPath + '/overview.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    # get LapDistPct and VFuel a Lift Point
-    LiftPointsVsFuelCons['LapDistPct'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    LiftPointsVsFuelCons['VFuelLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    for i in range(0, len(NBrake)):  # lift zones
-        # flip because x data must be monotonically increasing
-        x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
-        y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
-        for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
-            LiftPointsVsFuelCons['LapDistPct'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
-            LiftPointsVsFuelCons['VFuelLift'][k, i] = np.interp(LiftPointsVsFuelCons['LapDistPct'][k, i], d['LapDistPct'], d['VFuel'])
+    # # get LapDistPct and VFuel a Lift Point
+    # LiftPointsVsFuelCons['LapDistPctLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    # LiftPointsVsFuelCons['VFuelLift2'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    # for i in range(0, len(NBrake)):  # lift zones
+    #     # flip because x data must be monotonically increasing
+    #     x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
+    #     y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
+    #     for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
+    #         LiftPointsVsFuelCons['LapDistPctLift'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
+    #         LiftPointsVsFuelCons['VFuelLift2'][k, i] = np.interp(LiftPointsVsFuelCons['LapDistPctLift'][k, i], d['LapDistPct'], d['VFuel'])
+
+    # # get LapDistPct and VFuel a Apex Point
+    # LiftPointsVsFuelCons['LapDistPctApex'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    # LiftPointsVsFuelCons['VFuelApex'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
+    # for i in range(0, len(NApex)):  # lift zones
+    #     for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
+    #         LiftPointsVsFuelCons['LapDistPctApex'][k, i] = c['LapDistPct'][NApex[i]]
+    #         LiftPointsVsFuelCons['VFuelApex'][k, i] = d['VFuel'][NApex[i]]
 
     NApex = NApex + len(d['vCar']) - NCut - 1
     NApex[NApex > len(d['vCar'])] = NApex[NApex > len(d['vCar'])] - len(d['vCar']) + 1
@@ -511,24 +596,48 @@ def optimise(dirPath, TelemPath):
     NWOT[NWOT > len(d['vCar'])] = NWOT[NWOT > len(d['vCar'])] - len(d['vCar']) + 1
     NWOT = np.sort(NWOT)
 
-    plt.figure()  # TODO: make plot nice
-    plt.plot(d['LapDistPct'], d['vCar'], label='original')
-    plt.plot(d['LapDistPct'], d['vCar'], label='new', linestyle='dashed')
-    plt.scatter(d['LapDistPct'][NApex], d['vCar'][NApex], label='NApex')
-    plt.scatter(d['LapDistPct'][NBrake], d['vCar'][NBrake], label='NBrake')
-    plt.scatter(d['LapDistPct'][NLiftEarliest], d['vCar'][NLiftEarliest], label='NLiftEarliest')
-    plt.scatter(d['LapDistPct'][NWOT], d['vCar'][NWOT], label='NWOT')
+    NReference = NReference + len(d['vCar']) - NCut - 1
+    NReference[NReference > len(d['vCar'])] = NReference[NReference > len(d['vCar'])] - len(d['vCar']) + 1
+    NReference = np.sort(NReference)
+
+    d['NApex'] = NApex
+    d['NBrake'] = NBrake
+    d['NLiftEarliest'] = NLiftEarliest
+    d['NWOT'] = NWOT
+    d['NReference'] = NReference
+
+    print('NApex: ',  d['NApex'])
+    print('LapDistPctApex: ',  d['LapDistPct'][d['NApex']])
+
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
+    plt.plot(d['LapDistPct'], d['vCar'], label='d original')
+    plt.plot(d['LapDistPct'], d['vCar'], label='d new', linestyle='dashed')
+    plt.scatter(d['LapDistPct'][NApex], d['vCar'][NApex], label='NApex', zorder=99)
+    plt.scatter(d['LapDistPct'][NBrake], d['vCar'][NBrake], label='NBrake', zorder=99)
+    plt.scatter(d['LapDistPct'][NLiftEarliest], d['vCar'][NLiftEarliest], label='NLiftEarliest', zorder=99)
+    plt.scatter(d['LapDistPct'][NWOT], d['vCar'][NWOT], label='NWOT', zorder=99)
+    plt.scatter(d['LapDistPct'][NReference], d['vCar'][NReference], label='NReference', zorder=99)
+    plt.scatter(d['LapDistPct'][d['NApex']], d['vCar'][NApex], label='NApex c', marker='x', zorder=99)
+    plt.scatter(d['LapDistPct'][d['NBrake']], d['vCar'][NBrake], label='NBrake c', marker='x', zorder=99)
+    plt.scatter(d['LapDistPct'][d['NLiftEarliest']], d['vCar'][NLiftEarliest], label='NLiftEarliest d', marker='x', zorder=99)
+    plt.scatter(d['LapDistPct'][d['NWOT']], d['vCar'][NWOT], label='NWOT d', marker='x', zorder=99)
+    plt.scatter(d['LapDistPct'][d['NReference']], d['vCar'][NReference], label='NReference d', marker='x', zorder=99)
     plt.legend()
     plt.grid()
+    plt.tight_layout()
+    # manager = plt.get_current_fig_manager()
+    # manager.window.showMaximized()
     plt.savefig(resultsDirPath + '/resultsCheck.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    plt.figure()  # TODO: make plot nice
+    plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    plt.tight_layout()
     plt.plot(d['x'], d['y'], label='Track')
-    plt.scatter(d['x'][NApex], d['y'][NApex], label='NApex')
-    plt.scatter(d['x'][NBrake], d['y'][NBrake], label='NBrake')
-    plt.scatter(d['x'][NLiftEarliest], d['y'][NLiftEarliest], label='NLiftEarliest')
-    plt.scatter(d['x'][NWOT], d['y'][NWOT], label='NWOT')
+    plt.scatter(d['x'][NApex], d['y'][NApex], label='NApex', zorder=99)
+    plt.scatter(d['x'][NBrake], d['y'][NBrake], label='NBrake', zorder=99)
+    plt.scatter(d['x'][NLiftEarliest], d['y'][NLiftEarliest], label='NLiftEarliest', zorder=99)
+    plt.scatter(d['x'][NWOT], d['y'][NWOT], label='NWOT', zorder=99)
     plt.legend()
     for i in range(0, len(NBrake)):
         plt.annotate(s='Zone {}'.format(i+1), xy=(d['x'][NBrake][i], d['y'][NBrake][i]),
@@ -538,14 +647,19 @@ def optimise(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/trackMap.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
-    LiftPointsVsFuelCons['LapDistPct'] = (LiftPointsVsFuelCons['LapDistPct'] + 1-c['LapDistPct'][NCut]) * 100
-    LiftPointsVsFuelCons['LapDistPct'][LiftPointsVsFuelCons['LapDistPct'] > 100] = LiftPointsVsFuelCons['LapDistPct'][LiftPointsVsFuelCons['LapDistPct'] > 100] - 100
+    LiftPointsVsFuelCons['LapDistPctWOT'] = d['LapDistPct'][d['NWOT']] * 100
+    LiftPointsVsFuelCons['LapDistPctApex'] = d['LapDistPct'][d['NApex']] * 100
+    LiftPointsVsFuelCons['LapDistPctBrake'] = d['LapDistPct'][d['NBrake']] * 100
+    LiftPointsVsFuelCons['LapDistPctReference'] = d['LapDistPct'][d['NReference']] * 100
+
+    # LiftPointsVsFuelCons['LapDistPctLift'] = (LiftPointsVsFuelCons['LapDistPctLift'] + 1-c['LapDistPct'][NCut]) * 100
+    # LiftPointsVsFuelCons['LapDistPctLift'][LiftPointsVsFuelCons['LapDistPctLift'] > 100] = LiftPointsVsFuelCons['LapDistPctLift'][LiftPointsVsFuelCons['LapDistPctLift'] > 100] - 100
     LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
     LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
     LiftPointsVsFuelCons['ibtFileName'] = ibtPath
     LiftPointsVsFuelCons['tLapVFuelPolyFit'] = tLapVFuelPolyFit
 
-    LiftPointsVsFuelCons['LapDistPct'] = LiftPointsVsFuelCons['LapDistPct'].transpose()
+    # LiftPointsVsFuelCons['LapDistPctLift'] = LiftPointsVsFuelCons['LapDistPctLift'].transpose()
     LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
     LiftPointsVsFuelCons['SFuelConfigCarName'] = carScreenNameShort
     LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackDisplayShortName
