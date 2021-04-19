@@ -536,7 +536,7 @@ def optimise(dirPath, TelemPath):
         # VFuel Budget
         VFuelReference_temp = R['VFuelReference'][1:]
         VFuelReference_temp = np.append(VFuelReference_temp, [R['VFuel'][-1] + R['VFuelReference'][0]])
-        LiftPointsVsFuelCons['VFuelBudget'][i] = np.roll(VFuelReference_temp - R['VFuelLift'], 1)
+        LiftPointsVsFuelCons['VFuelBudget'][i] = np.roll(VFuelReference_temp - R['VFuelLift'], 2)
 
         # VFuel at reference points
         VFuelLift_temp = R['VFuel'][NReference]
@@ -554,6 +554,7 @@ def optimise(dirPath, TelemPath):
             plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[i], 2)))
             # plt.scatter(R['LapDistPct'][NSplit], R['vCar'][NSplit], label=str(round(VFuelTGT[i], 2)))
             # plt.plot(R['LapDisVFuelReference_temptPct'], R['VFuel'], label=str(round(VFuelTGT[i], 2)))
+            # plt.scatter(R['LapDistPct'][R['NLift']], R['VFuel'][R['NLift']], label=str(round(VFuelTGT[i], 2)))
             # plt.scatter(R['LapDistPct'][R['NLift']], R['VFuel'][R['NLift']], label=str(round(VFuelTGT[i], 2)))
 
     plt.legend()
@@ -659,7 +660,10 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['ibtFileName'] = ibtPath
     LiftPointsVsFuelCons['tLapVFuelPolyFit'] = tLapVFuelPolyFit
 
-    # LiftPointsVsFuelCons['LapDistPctLift'] = LiftPointsVsFuelCons['LapDistPctLift'].transpose()
+    LiftPointsVsFuelCons['LapDistPctLift'] = LiftPointsVsFuelCons['LapDistPctLift'].transpose() * 100
+    LiftPointsVsFuelCons['VFuelBudget'] = LiftPointsVsFuelCons['VFuelBudget'].transpose()
+    LiftPointsVsFuelCons['VFuelLift'] = LiftPointsVsFuelCons['VFuelLift'].transpose()
+    LiftPointsVsFuelCons['VFuelReference'] = LiftPointsVsFuelCons['VFuelReference'].transpose()
     LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
     LiftPointsVsFuelCons['SFuelConfigCarName'] = carScreenNameShort
     LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackDisplayShortName
