@@ -27,7 +27,7 @@ def getRollOutCurve(dirPath, TelemPath):
 
     # imoport ibt file
     d, var_headers_names = importIBT.importIBT(ibtPath,
-                                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel', 'rClutch', 'vWheelRL', 'vWheelRR', 'vCarX'],
+                                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'dmFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel', 'rClutch', 'vWheelRL', 'vWheelRR', 'vCarX'],
                                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')
 
     setupName = d['DriverInfo']['DriverSetupName']
@@ -118,7 +118,7 @@ def getRollOutCurve(dirPath, TelemPath):
     plt.figure()  # TODO: make plot nice
     plt.grid()
     plt.xlabel('vCar [m/s]')
-    plt.ylabel('QFuel [g/s]')
+    plt.ylabel('QFuel [l/s]')
     plt.xlim(0, np.max(d['vCar'][d['BCoasting']]) + 5)
     plt.ylim(0, np.max(d['QFuel'][d['BCoasting']]) * 1.5)
 
