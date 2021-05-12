@@ -254,11 +254,13 @@ def optimise(dirPath, TelemPath):
 
     # find potential lift point (from full throttle to braking)
     NWOT = scipy.signal.find_peaks(c['rThrottle'], height=1, plateau_size=20)
-    NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.9, prominence=0.25)
+    # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
+    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100, plateau_size=(10, 1000))
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
-    NBrake = NBrake[1]['right_edges']
+    # NBrake = NBrake[1]['right_edges']
+    NBrake = NBrake[1]['left_edges']
 
     c['NApex'] = NApex
 
@@ -411,6 +413,8 @@ def optimise(dirPath, TelemPath):
 
     rLiftPlot = np.linspace(0, 1, 1000)
 
+    NZone = np.roll(np.linspace(1, len(NLiftEarliest), len(NLiftEarliest),dtype=int),-1)
+
     for i in range(0, len(NLiftEarliest)):
         # remove nan indices
         yTime = tLapRLift[i, :]
@@ -425,24 +429,24 @@ def optimise(dirPath, TelemPath):
         if BPlot:  # TODO: save these plots in a subdirectory
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
             plt.tight_layout()
-            plt.title('Lap Time Loss - Lift Zone ' + str(i + 1))
+            plt.title('Lap Time Loss - Lift Zone ' + str(NZone[i]))
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
             plt.scatter(rLift, tLapRLift[i, :])
             plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(NZone[i]) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
             plt.tight_layout()
-            plt.title('Fuel Save - Lift Zone ' + str(i + 1))
+            plt.title('Fuel Save - Lift Zone ' + str(NZone[i]))
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
             plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(i + 1) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(NZone[i]) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
     # maximum lift
@@ -502,7 +506,7 @@ def optimise(dirPath, TelemPath):
     plt.xlabel('VFuelTGT [l]')
     plt.ylabel('rLift [-]')
     for k in range(0, len(NLiftEarliest)):
-        plt.plot(LiftPointsVsFuelCons['VFuelTGT'], LiftPointsVsFuelCons['LiftPoints'][:, k], label='Lift Zone ' + str(k + 1))
+        plt.plot(LiftPointsVsFuelCons['VFuelTGT'], LiftPointsVsFuelCons['LiftPoints'][:, k], label='Lift Zone ' + str(NZone[k]))
 
     plt.legend()
     plt.grid()
@@ -671,7 +675,7 @@ def optimise(dirPath, TelemPath):
     plt.scatter(d['x'][NWOT], d['y'][NWOT], label='NWOT', zorder=99)
     plt.legend()
     for i in range(0, len(NBrake)):
-        plt.annotate(s='Zone {}'.format(i + 1), xy=(d['x'][NBrake][i], d['y'][NBrake][i]),
+        plt.annotate(s='Zone {}'.format(i+1), xy=(d['x'][NBrake][i], d['y'][NBrake][i]),
                      xycoords='data', xytext=(-10, -10), textcoords='offset points',
                      horizontalalignment='right', verticalalignment='top')
     plt.grid()
@@ -700,12 +704,13 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackName
 
     # export data
-    saveJson(LiftPointsVsFuelCons, resultsDirPath)
+    # saveJson(LiftPointsVsFuelCons, resultsDirPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Fuel Saving Optimisation!')
 
+
     # # correlation
-    # VFuelCorrelationTgt = 1.7011874736971767
+    # VFuelCorrelationTgt = 1.70
     #
     # LiftPoints = np.array([])
     #
@@ -730,6 +735,9 @@ def optimise(dirPath, TelemPath):
     #     elif keys[i] == 'LapDistPct':
     #         RR[keys[i]] = temp[keys[i]][NCut:-1] - R['LapDistPct'][NCut]
     #         RR[keys[i]] = np.append(RR[keys[i]], temp[keys[i]][0:NCut] + RR[keys[i]][-1] + temp['dLapDistPct'][-1])
+    #     elif keys[i] == 'VFuel':
+    #         RR[keys[i]] = temp[keys[i]][NCut:-1] - R['VFuel'][NCut]
+    #         RR[keys[i]] = np.append(RR[keys[i]], temp[keys[i]][0:NCut] + RR[keys[i]][-1] + temp['QFuel'][-1] * temp['dt'][-1])
     #     else:
     #         if type(temp[keys[i]]) is dict:
     #             RR[keys[i]] = temp[keys[i]]
@@ -747,7 +755,7 @@ def optimise(dirPath, TelemPath):
     #
     # # imoport ibt file
     # f, _ = importIBT.importIBT(ibtPath,
-    #                            lap=11,
+    #                            lap=27,
     #                            channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'FuelLevel'],
     #                            channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
     #
@@ -755,7 +763,7 @@ def optimise(dirPath, TelemPath):
     # plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     # plt.tight_layout()
     # plt.plot(RR['sLap'], RR['vCar'], label='Simulation')
-    # plt.plot(f['sLap'], f['vCar'], label='Running')
+    # plt.plot(f['sLap'], f['vCar'], label='iRacing')
     # plt.legend()
     # plt.grid()
     # plt.savefig(resultsDirPath + '/Correlation_vCar.png', dpi=300, orientation='landscape', progressive=True)
@@ -765,7 +773,7 @@ def optimise(dirPath, TelemPath):
     # plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     # plt.tight_layout()
     # plt.plot(RR['sLap'], RR['QFuel'], label='Simulation')
-    # plt.plot(f['sLap'], f['QFuel'], label='Running')
+    # plt.plot(f['sLap'], f['QFuel'], label='iRacing')
     # plt.legend()
     # plt.grid()
     # plt.savefig(resultsDirPath + '/Correlation_QFuel.png', dpi=300, orientation='landscape', progressive=True)
@@ -774,9 +782,10 @@ def optimise(dirPath, TelemPath):
     #
     # plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     # plt.tight_layout()
-    # plt.plot(RR['sLap'], RR['VFuel'], label='Simulation')
-    # plt.plot(f['sLap'], f['FuelLevel'], label='Running')
+    # plt.plot(RR['sLap'], RR['VFuel']-RR['VFuel'][0], label='Simulation')
+    # plt.plot(f['sLap'], -f['VFuel']+f['VFuel'][0], label='iRacing')
     # plt.legend()
     # plt.grid()
     # plt.savefig(resultsDirPath + '/Correlation_VFuel.png', dpi=300, orientation='landscape', progressive=True)
     # plt.close()
+    #
