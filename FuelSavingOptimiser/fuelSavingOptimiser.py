@@ -50,11 +50,13 @@ def stepFwds(x, n, LiftGear, car, NBrake):
 
     while n < NBrake or temp['vCar'][n] < temp['vCar'][n + 1] and n + 1 < len(temp['vCar']):
         vCar = temp['vCar'][n]
-        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
+        gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
+        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n + 1] = temp['vCar'][n] + gLong * temp['dt'][n]
         temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
+        temp['rThrottle'][n] = 0
         n += 1
         i += 1
 
@@ -75,7 +77,7 @@ def calcLapTime(x):
     return x
 
 
-def stepBwds(x, i, LiftGear, car, NApex_temp):
+def stepBwds(x, i, LiftGear, car, NApex_temp, NBrake):
     n = i
     temp = copy.deepcopy(x)
 
@@ -84,14 +86,21 @@ def stepBwds(x, i, LiftGear, car, NApex_temp):
 
     while temp['vCar'][n] <= x['vCar'][n - 1] and n > NApex_temp:
         vCar = temp['vCar'][n]
-        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi)
+        gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
+        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
         temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
+        temp['rThrottle'][n] = 0
         n = n - 1
 
-    return temp, int(n)
+    if n <= NApex_temp:
+        n = NApex_temp + 10
+        temp = copy.deepcopy(x)
+        temp = stepFwds(temp, n, LiftGear, car, NBrake)
+
+    return temp, int(n + 1)
 
 
 def objectiveLapTime(rLift, *args):
@@ -143,7 +152,7 @@ def optimise(dirPath, TelemPath):
     # imoport ibt file
     d, _ = importIBT.importIBT(ibtPath,
                                lap='f',
-                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'VFuel'],
+                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'VFuel', 'gLat'],
                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
 
     DriverCarIdx = d['DriverInfo']['DriverCarIdx']
@@ -166,6 +175,9 @@ def optimise(dirPath, TelemPath):
     resultsDirPath = dirPath + "/data/fuelSaving/" + TrackName + ' - ' + carScreenNameShort
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
+
+    # calculate curvature
+    d['CTrack'] = d['gLat'] / np.square(d['vCar'])
 
     # calculate aTrackIncline smooth(atan( derivative('Alt' [m]) / derivative('Lap Distance' [m]) ), 1.5)
     d['aTrackIncline'] = np.arctan(np.gradient(d['zTrack']) / np.gradient(d['sLap']))
@@ -253,9 +265,9 @@ def optimise(dirPath, TelemPath):
     c['rBrake'][0] = 1  # fudging around to find the first brake point
 
     # find potential lift point (from full throttle to braking)
-    NWOT = scipy.signal.find_peaks(c['rThrottle'], height=1, plateau_size=20)
+    NWOT = scipy.signal.find_peaks(c['rThrottle'], height=0.7, plateau_size=50)
     # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
-    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100, plateau_size=(10, 1000))
+    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100, plateau_size=(70, 1000))
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
@@ -367,7 +379,7 @@ def optimise(dirPath, TelemPath):
         else:
             NApex_temp = NApex[i - 1]
 
-        c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85 * (NApex[i] - NBrake[i])), LiftGear[i], car, NApex_temp)
+        c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85 * (NApex[i] - NBrake[i])), LiftGear[i], car, NApex_temp, NBrake[i])
         NLiftEarliest = np.append(NLiftEarliest, n)
 
     NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
@@ -704,7 +716,7 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackName
 
     # export data
-    # saveJson(LiftPointsVsFuelCons, resultsDirPath)
+    saveJson(LiftPointsVsFuelCons, resultsDirPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Fuel Saving Optimisation!')
 
