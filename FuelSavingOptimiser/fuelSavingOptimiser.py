@@ -721,6 +721,10 @@ def optimise(dirPath, TelemPath):
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Fuel Saving Optimisation!')
 
 
+if __name__ == "__main__":
+    optimise('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry')
+
+
     # # correlation
     # VFuelCorrelationTgt = 1.70
     #

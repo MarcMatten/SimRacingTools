@@ -153,3 +153,7 @@ def getRollOutCurve(dirPath, TelemPath):
     car.save(carFilePath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')
+
+
+if __name__ == "__main__":
+    getRollOutCurve('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry')

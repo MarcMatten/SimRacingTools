@@ -42,6 +42,10 @@ def getShiftRPM(dirPath, TelemPath):
     car = Car(carScreenNameShort)
     carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
 
+    d['gLong'] = filters.movingAverage(d['gLong'], 5)
+    d['vCar'] = filters.movingAverage(d['vCar'], 5)
+    d['RPM'] = filters.movingAverage(d['RPM'], 5)
+
     if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
@@ -68,13 +72,19 @@ def getShiftRPM(dirPath, TelemPath):
     resultsDirPath = dirPath + "/data/shiftTone/" + ibtPath.split('/')[-1].split('.ibt')[0]
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
-
-    d['BStraightLine'] = np.logical_and((d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03, np.abs(d['vCar']) > 10)
+    if d['WeekendInfo']['Category'] == 'Oval':
+        d['BStraightLine'] = np.logical_and((d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.05, np.abs(d['vCar']) > 10)
+    else:
+        d['BStraightLine'] = np.logical_and((d['gLat']) < 1, np.abs(d['SteeringWheelAngle']) < 0.03, np.abs(d['vCar']) > 10)
     d['BWOT'] = np.logical_and((d['rThrottle']) == 1, np.abs(d['rBrake']) == 0)
-    d['BCoasting'] = np.logical_and((d['rThrottle']) == 0 , np.abs(d['rBrake']) == 0)
+    d['BCoasting'] = np.logical_and((d['rThrottle']) == 0, np.abs(d['rBrake']) == 0)
     d['BShiftRPM'] = np.logical_and(d['BStraightLine'], d['BWOT'])
-    d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.3)
-    minRPM = 0.7 * car.iRShiftRPM[0]
+    if d['WeekendInfo']['Category'] == 'Oval':
+        d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.01)
+        minRPM = 0.5 * car.iRShiftRPM[0]
+    else:
+        d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['gLong'] > 0.3)
+        minRPM = 0.7 * car.iRShiftRPM[0]
     d['BShiftRPM'] = np.logical_and(d['BShiftRPM'], d['RPM'] > minRPM)
 
     plt.ioff()
@@ -177,3 +187,6 @@ def getShiftRPM(dirPath, TelemPath):
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
 
+
+if __name__ == "__main__":
+    getShiftRPM('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry')
