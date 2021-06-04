@@ -4,3 +4,4 @@
 /FuelSavingOptimiser/.idea/inspectionProfiles/*.xml
 /FuelSavingOptimiser/.idea/*.iml
 /FuelSavingOptimiser/.idea
+*.pyo
