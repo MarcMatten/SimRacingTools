@@ -250,7 +250,7 @@ def optimise(dirPath, TelemPath):
         else:
             if type(temp[keys[i]]) is dict:
                 c[keys[i]] = temp[keys[i]]
-            else:
+            elif np.size(temp[keys[i]]) > 1:
                 c[keys[i]] = temp[keys[i]][NApex[0]:-1]
                 c[keys[i]] = np.append(c[keys[i]], temp[keys[i]][0:NApex[0]])
 
@@ -267,7 +267,8 @@ def optimise(dirPath, TelemPath):
     # find potential lift point (from full throttle to braking)
     NWOT = scipy.signal.find_peaks(c['rThrottle'], height=0.7, plateau_size=50)
     # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
-    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100, plateau_size=(70, 1000))
+    gLongNeg = -np.clip(filters.movingAverage(c['rBrake'], 10), -2, -1)
+    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100 + gLongNeg, plateau_size=(100, 1000))
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']

@@ -54,7 +54,7 @@ def getShiftRPM(dirPath, TelemPath):
         UserShiftRPM = [0] * 7
         UserShiftFlag = [False] * 7
 
-        for k in range(0,np.max(d['Gear'])-1):
+        for k in range(0, np.max(d['Gear'])-1):
             UserShiftRPM[k] = d['DriverInfo']['DriverCarSLShiftRPM']
             UserShiftFlag[k] = True
 
@@ -184,6 +184,7 @@ def getShiftRPM(dirPath, TelemPath):
     car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], setupName, d['CarSetup'])
     car.setGearRatios(rGearRatios)
     car.save(carFilePath)
+    car.MotecXMLexport()
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
 
