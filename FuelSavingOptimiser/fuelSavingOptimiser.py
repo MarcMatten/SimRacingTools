@@ -155,24 +155,19 @@ def optimise(dirPath, TelemPath):
                                channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'VFuel', 'gLat'],
                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
 
-    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
-    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
-    # TrackDisplayShortName = d['WeekendInfo']['TrackDisplayShortName']
-    TrackName = d['WeekendInfo']['TrackName']
-
     # If car file exists, load it. Otherwise, throw an error. TODO: whole section is duplicate with rollOut
-    car = Car(carScreenNameShort)
-    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+    car = Car(Driver=d['DriverInfo']['Drivers'][d['DriverInfo']['DriverCarIdx']])
+    carFilePath = dirPath + '/data/car/' + car.name + '.json'
 
-    if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
+    if car.name + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
-        print('Error! Car file for {} does not exist. Create car with roll-out curves first!'.format(carScreenNameShort))
+        print('Error! Car file for {} does not exist. Create car with roll-out curves first!'.format(car.name))
 
     # TODO: check if car has roll-out curve
 
     # create results directory
-    resultsDirPath = dirPath + "/data/fuelSaving/" + TrackName + ' - ' + carScreenNameShort
+    resultsDirPath = dirPath + "/data/fuelSaving/" + d['WeekendInfo']['TrackName'] + ' - ' + car.name
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
@@ -713,8 +708,8 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['VFuelLift'] = LiftPointsVsFuelCons['VFuelLift'].transpose()
     LiftPointsVsFuelCons['VFuelReference'] = LiftPointsVsFuelCons['VFuelReference'].transpose()
     LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
-    LiftPointsVsFuelCons['SFuelConfigCarName'] = carScreenNameShort
-    LiftPointsVsFuelCons['SFuelConfigTrackName'] = TrackName
+    LiftPointsVsFuelCons['SFuelConfigCarName'] = car.name
+    LiftPointsVsFuelCons['SFuelConfigTrackName'] = d['WeekendInfo']['TrackName']
 
     # export data
     saveJson(LiftPointsVsFuelCons, resultsDirPath)

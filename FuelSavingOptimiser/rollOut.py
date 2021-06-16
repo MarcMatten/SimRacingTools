@@ -30,15 +30,12 @@ def getRollOutCurve(dirPath, TelemPath):
                                                channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'dmFuel', 'RPM', 'SteeringWheelAngle', 'Gear', 'gLong', 'gLat', 'QFuel', 'rClutch', 'vWheelRL', 'vWheelRR', 'vCarX'],
                                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')
 
-    setupName = d['DriverInfo']['DriverSetupName']
-    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
-    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
 
     # If car file exists, load it. Otherwise, create new car object TODO: whole section is duplicate with getShiftRPM
-    car = Car(carScreenNameShort)
-    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+    car = Car(Driver=d['DriverInfo']['Drivers'][d['DriverInfo']['DriverCarIdx']])
+    carFilePath = dirPath + '/data/car/' + car.name + '.json'
 
-    if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
+    if car.name + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
         tempDB = RTDB.RTDB()
@@ -148,7 +145,7 @@ def getRollOutCurve(dirPath, TelemPath):
     plt.savefig(resultsDirPath + '/rGearRatio.png', dpi=300, orientation='landscape', progressive=True)
 
     # save so car file
-    car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear, setupName, d['CarSetup'])
+    car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear, d['DriverInfo']['DriverSetupName'], d['CarSetup'])
     car.setGearRatios(rGearRatios)
     car.save(carFilePath)
 

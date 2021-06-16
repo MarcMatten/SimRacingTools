@@ -15,7 +15,7 @@ from libs.Car import Car
 from SimRacingTools.getGearRatios import getGearRatios
 
 
-def getShiftRPM(dirPath, TelemPath):
+def getShiftRPM(dirPath, TelemPath, MotecProjectPath):
     tReaction = 0.3  # TODO: as input to tune from GUI
 
     root = tk.Tk()
@@ -34,19 +34,15 @@ def getShiftRPM(dirPath, TelemPath):
                                                channels=['gLat', 'rThrottle', 'rBrake', 'SteeringWheelAngle', 'gLong', 'Gear', 'RPM', 'EngineWarnings', 'SessionTime', 'vWheelRL', 'vWheelRR', 'vCarX'],
                                                channelMapPath=dirPath+'/functionalities/libs/iRacingChannelMap.csv')
 
-    setupName = d['DriverInfo']['DriverSetupName']
-    DriverCarIdx = d['DriverInfo']['DriverCarIdx']
-    carScreenNameShort = d['DriverInfo']['Drivers'][DriverCarIdx]['CarScreenNameShort']
-
     # If car file exists, load it. Otherwise, create new car object TODO: whole section is duplicate with rollOut
-    car = Car(carScreenNameShort)
-    carFilePath = dirPath + '/data/car/' + carScreenNameShort + '.json'
+    car = Car(Driver=d['DriverInfo']['Drivers'][d['DriverInfo']['DriverCarIdx']])
+    carFilePath = dirPath + '/data/car/' + car.name + '.json'
 
     d['gLong'] = filters.movingAverage(d['gLong'], 5)
     d['vCar'] = filters.movingAverage(d['vCar'], 5)
     d['RPM'] = filters.movingAverage(d['RPM'], 5)
 
-    if carScreenNameShort + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
+    if car.name + '.json' in importExport.getFiles(dirPath + '/data/car', 'json'):
         car.load(carFilePath)
     else:
         tempDB = RTDB.RTDB()
@@ -181,13 +177,13 @@ def getShiftRPM(dirPath, TelemPath):
     rGearRatios = getGearRatios(d, resultsDirPath)
 
     # save so car file
-    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], setupName, d['CarSetup'])
+    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], d['DriverInfo']['DriverSetupName'], d['CarSetup'], int(max(NGear)))
     car.setGearRatios(rGearRatios)
     car.save(carFilePath)
-    car.MotecXMLexport()
+    car.MotecXMLexport(dirPath, MotecProjectPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted Upshift calculation!')
 
 
 if __name__ == "__main__":
-    getShiftRPM('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry')
+    getShiftRPM('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry', 'C:/Users/marc/Documents/MoTeC/i2/Workspaces/Circuit 1')
