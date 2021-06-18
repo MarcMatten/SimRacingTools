@@ -46,6 +46,7 @@ def getShiftRPM(dirPath, TelemPath, MotecProjectPath):
         car.load(carFilePath)
     else:
         tempDB = RTDB.RTDB()
+        tempDB.dir = dirPath
         tempDB.initialise(d, False, False)
         UserShiftRPM = [0] * 7
         UserShiftFlag = [False] * 7
@@ -111,10 +112,12 @@ def getShiftRPM(dirPath, TelemPath, MotecProjectPath):
         maxRPM.append(np.max(d['RPM'][d['BGear'][i]]))
         vCarTemp = d['vCar'][d['BGear'][i]]
         vCarMaxgLong.append(vCarTemp[np.argmax(d['gLong'][d['BGear'][i]])])
+        vCarMaxGear = np.max(d['vCar'][d['BGear'][i]])
 
         tempBRPMRange = np.logical_and(d['BGear'][i], d['RPM'] > minRPM)
         tempBRPMRange = np.logical_and(tempBRPMRange, d['RPM'] < maxRPM[i])
         tempBRPMRange = np.logical_and(tempBRPMRange, d['vCar'] > vCarMaxgLong[i])
+        tempBRPMRange = np.logical_and(tempBRPMRange, d['vCar'] < vCarMaxGear - 1)
         tempBRPMRange = np.logical_and(tempBRPMRange, filters.movingAverage(d['EngineWarnings'], 6) < 1)
 
         d['BRPMRange'].append(tempBRPMRange)
