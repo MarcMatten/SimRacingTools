@@ -138,6 +138,44 @@ def saveJson(x, path):
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tSaved data ' + filepath)
 
 
+def filterPoints(a, b):
+    n = 0
+    res = np.array([])
+    delta = np.array([])
+
+    idxA = 0
+    idxB = 0
+
+    for i in range(0, len(b)):
+        l = len(res)
+
+        delta = np.append(delta, np.min(np.abs(a - b[idxB])))
+        idxDelta = np.argmin(np.abs(a - b[idxB]))
+
+        # print('{} | {} | {}'.format(a[idxA], b[idxB], delta[i]))
+
+        if idxDelta == idxA:
+            if delta[i] <= 100 and delta[i] > 0 and a[l] > b[idxB]:
+                res = np.append(res, b[idxB])
+                n += 1
+                idxB += 1
+                idxA += 1
+            elif delta[i] == 0:
+                if idxB < len(b):
+                    res = np.append(res, b[idxB])
+                idxA += 1
+                idxB += 1
+            else:
+                idxB += 1
+
+            if idxA == len(a) or idxB == len(b):
+                break
+        else:
+            idxB += 1
+
+    return np.unique(res).astype(int)
+
+
 def optimise(dirPath, TelemPath):
     BPlot = True
 
@@ -196,8 +234,15 @@ def optimise(dirPath, TelemPath):
 
     # find apex points
     NApex = scipy.signal.find_peaks(200 - d['vCar'], height=10, prominence=1)[0]
-    NApexHD = scipy.signal.find_peaks(200 - d['vCar'], height=1, prominence=0.3)[0]
-    NApexHDUnique = [x for x in NApexHD if x not in NApex]
+    NApexHD = scipy.signal.find_peaks(200 - d['vCar'], height=1, prominence=0.04)[0]
+
+    BGearShiftInRange = filters.movingAverage(d['Gear'], 4) % 1
+
+    NApexHD = [elem for elem in NApexHD if BGearShiftInRange[elem] == 0.0 and d['Gear'][elem] > 0]
+
+    NApex = filterPoints(NApex, NApexHD)
+
+    # NApexHDUnique = [x for x in NApexHD if x not in NApex]
     # np.argmin(abs(NApex - NApexHDUnique))
 
     # NApex = scipy.signal.find_peaks(1 - d['rThrottle'], height=1, prominence=1, plateau_size=50)
@@ -451,7 +496,7 @@ def optimise(dirPath, TelemPath):
 
     rLiftPlot = np.linspace(0, 1, 1000)
 
-    NZone = np.roll(np.linspace(1, len(NLiftEarliest), len(NLiftEarliest),dtype=int),-1)
+    NZone = np.roll(np.linspace(1, len(NLiftEarliest), len(NLiftEarliest) ),-1)
 
     for i in range(0, len(NLiftEarliest)):
         # remove nan indices
@@ -467,7 +512,7 @@ def optimise(dirPath, TelemPath):
         if BPlot:  # TODO: save these plots in a subdirectory
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
             plt.tight_layout()
-            plt.title('Lap Time Loss - Lift Zone ' + str(NZone[i]))
+            plt.title('Lap Time Loss - Lift Zone ' + str(int(NZone[i])))
             plt.xlabel('rLift [-]')
             plt.ylabel('dtLap [s]')
             plt.scatter(rLift, tLapRLift[i, :])
@@ -478,7 +523,7 @@ def optimise(dirPath, TelemPath):
 
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
             plt.tight_layout()
-            plt.title('Fuel Save - Lift Zone ' + str(NZone[i]))
+            plt.title('Fuel Save - Lift Zone ' + str(int(NZone[i])))
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
@@ -544,7 +589,7 @@ def optimise(dirPath, TelemPath):
     plt.xlabel('VFuelTGT [l]')
     plt.ylabel('rLift [-]')
     for k in range(0, len(NLiftEarliest)):
-        plt.plot(LiftPointsVsFuelCons['VFuelTGT'], LiftPointsVsFuelCons['LiftPoints'][:, k], label='Lift Zone ' + str(NZone[k]))
+        plt.plot(LiftPointsVsFuelCons['VFuelTGT'], LiftPointsVsFuelCons['LiftPoints'][:, k], label='Lift Zone ' + str(int(NZone[k])))
 
     plt.legend()
     plt.grid()
