@@ -53,6 +53,7 @@ def stepFwds(x, n, LiftGear, car, NBrake):
         gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
         gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
         ds = temp['ds'][n]
+        # print('{} | {} | {}'.format(vCar, gLong, ds))
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n + 1] = temp['vCar'][n] + gLong * temp['dt'][n]
         temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
@@ -88,6 +89,8 @@ def stepBwds(x, i, LiftGear, car, NApex_temp, NBrake):
         vCar = temp['vCar'][n]
         gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
         gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
+        if i-n <= 3:
+            gLong = gLong / (4-i+n)
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
@@ -192,8 +195,14 @@ def optimise(dirPath, TelemPath):
     print('\nPreperations done ... Analysing track')
 
     # find apex points
-    NApex = scipy.signal.find_peaks(200 - d['vCar'], height=10, prominence=1)
-    NApex = NApex[0]
+    NApex = scipy.signal.find_peaks(200 - d['vCar'], height=10, prominence=1)[0]
+    NApexHD = scipy.signal.find_peaks(200 - d['vCar'], height=1, prominence=0.3)[0]
+    NApexHDUnique = [x for x in NApexHD if x not in NApex]
+    # np.argmin(abs(NApex - NApexHDUnique))
+
+    # NApex = scipy.signal.find_peaks(1 - d['rThrottle'], height=1, prominence=1, plateau_size=50)
+    # NApex = NApex[1]['right_edges']
+
     dNApex = np.diff(d['sLap'][NApex]) < 50
     if any(dNApex):
         for i in range(0, len(dNApex)):
@@ -218,11 +227,21 @@ def optimise(dirPath, TelemPath):
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
     plt.scatter(d['sLap'][NApex], d['vCar'][NApex], label='Apex Points')
+    plt.scatter(d['sLap'][NApexHD], d['vCar'][NApexHD], label='HD Apex Points', marker='x')
     plt.legend()
     plt.savefig(resultsDirPath + '/apexPoints.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
     d['NApex'] = NApex
+
+    for i in range(0, len(NApex)):
+        if d['rThrottle'][NApex][i] == 1:
+            # d['rThrottle'][NApex[i]:NApex[i]+10] = 0
+            z = 0
+            while d['rThrottle'][NApex[i]-z] > 0:
+                z += 1
+
+            d['rThrottle'][NApex[i]-z:NApex[i]+10] = 0
 
     # cut lap at first apex
     print('\tCutting data at {} m'.format(np.round(d['sLap'][NApex][0], 1)))
@@ -260,15 +279,21 @@ def optimise(dirPath, TelemPath):
     c['rBrake'][0] = 1  # fudging around to find the first brake point
 
     # find potential lift point (from full throttle to braking)
-    NWOT = scipy.signal.find_peaks(c['rThrottle'], height=0.7, plateau_size=50)
+    rThrottleClipped = (np.clip(c['rThrottle'], 0.8, 1)-0.8)*5
+    rThrottleClipped[-1] = 0
+    rThrottleClipped[0] = 1
+    NWOT = scipy.signal.find_peaks(rThrottleClipped, height=0.7, plateau_size=5)
     # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
-    gLongNeg = -np.clip(filters.movingAverage(c['rBrake'], 10), -2, -1)
-    NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100 + gLongNeg, plateau_size=(100, 1000))
+    # gLongNeg = -np.clip(filters.movingAverage(c['rBrake'], 10), -2, -1)
+    # NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100 + gLongNeg, plateau_size=(100, 1000))
+
+    NBrake = scipy.signal.find_peaks(c['vCar'], prominence=1)[0]
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
+
     # NBrake = NBrake[1]['right_edges']
-    NBrake = NBrake[1]['left_edges']
+    # NBrake = NBrake[1]['left_edges']
 
     c['NApex'] = NApex
 
@@ -396,11 +421,16 @@ def optimise(dirPath, TelemPath):
     # for each lifting zone calculate various ratios of lifting
     rLift = np.linspace(0, 1, 50)
 
-    VFuelRLift = np.zeros((len(NLiftEarliest), len(rLift)))
-    tLapRLift = np.zeros((len(NLiftEarliest), len(rLift)))
+    VFuelRLift = np.zeros((len(NLiftEarliest), len(rLift))) + c['VFuel'][-1]
+    tLapRLift = np.zeros((len(NLiftEarliest), len(rLift))) + c['tLap'][-1]
 
     for i in range(0, len(NLiftEarliest)):
         print('\t\tLift zone: {}/{}'.format(i + 1, len(NLiftEarliest)))
+        if NApex[i] - NLiftEarliest[i] <= 40:
+            # tLapRLift[i, :] = c['tLap'][-1]
+            # VFuelRLift[i, :] = c['VFuel'][-1]
+            print('\t\t\tAborted...')
+            continue
         for k in range(1, len(rLift)):
             # print('Lift zone: {} - rLift: {}'.format(i, k))
             tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
@@ -410,8 +440,8 @@ def optimise(dirPath, TelemPath):
     VFuelRLift = VFuelRLift - c['VFuel'][-1]
 
     # remove outliners
-    VFuelRLift[tLapRLift == 0] = nan
-    tLapRLift[tLapRLift == 0] = nan
+    # VFuelRLift[tLapRLift == 0] = nan
+    # tLapRLift[tLapRLift == 0] = nan
     tLapRLift[:, 0] = 0
     VFuelRLift[:, 0] = 0
 
