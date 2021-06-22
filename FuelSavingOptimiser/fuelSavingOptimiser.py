@@ -11,8 +11,19 @@ import scipy.signal
 
 from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
+from datetime import datetime
 
 nan = float('nan')
+
+# tuning parameters
+NSTEPSRAMPINGLONG = 3  # gLong is gradually ramped in stepBwds
+DISTANCEAPEXSHIFT = 100  # distance range between apex points in filterPoints in which the earlier might be selected
+NAPEXPROMINENCE = 1  # required prominence of peaks in vCar to identify apex point
+NAPEXHDPROMINENCE = 0.04  # required prominence of peaks in vCar to identify HD apex point
+DISTANCEBETWEENAPICES = 50  # allowed distnace between apex points in filterPoints
+NBRAKEPROMINENCE = 1  # required prominence of peaks in inverted vCar to identify apex point
+NWOTPLATEUSIZE = 5  # required plateu size in clipped rThrottle to detect full throttle
+NWOTHEIGHT = 0.7  # required height in clipped rThrottle to detect full throttle
 
 
 def costFcn(rLift, car, *args):
@@ -89,8 +100,8 @@ def stepBwds(x, i, LiftGear, car, NApex_temp, NBrake):
         vCar = temp['vCar'][n]
         gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
         gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
-        if i-n <= 3:
-            gLong = gLong / (4-i+n)
+        if i-n <= NSTEPSRAMPINGLONG:
+            gLong = gLong / (NSTEPSRAMPINGLONG+1-i+n)
         ds = temp['ds'][n]
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
         temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
@@ -124,8 +135,10 @@ def calcFuelConstraint(rLift, *args):
 
 
 def saveJson(x, path):
+    filename = 'fuelSavingConfig.json'
+
     filepath = filedialog.asksaveasfilename(initialdir=path,
-                                            initialfile='fuelSaving.json',
+                                            initialfile=filename,
                                             title="Where to save results?",
                                             filetypes=[("JSON files", "*.json"), ("all files", "*.*")])
 
@@ -155,7 +168,7 @@ def filterPoints(a, b):
         # print('{} | {} | {}'.format(a[idxA], b[idxB], delta[i]))
 
         if idxDelta == idxA:
-            if delta[i] <= 100 and delta[i] > 0 and a[l] > b[idxB]:
+            if 0 < delta[i] <= DISTANCEAPEXSHIFT and a[l] > b[idxB]:
                 res = np.append(res, b[idxB])
                 n += 1
                 idxB += 1
@@ -208,7 +221,9 @@ def optimise(dirPath, TelemPath):
     # TODO: check if car has roll-out curve
 
     # create results directory
-    resultsDirPath = dirPath + "/data/fuelSaving/" + d['WeekendInfo']['TrackName'] + ' - ' + car.name
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    resultsDirPath = dirPath + "/data/fuelSaving/" + dt_string + '_' + car.carPath + '_' + d['WeekendInfo']['TrackName']
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
@@ -233,8 +248,8 @@ def optimise(dirPath, TelemPath):
     print('\nPreperations done ... Analysing track')
 
     # find apex points
-    NApex = scipy.signal.find_peaks(200 - d['vCar'], height=10, prominence=1)[0]
-    NApexHD = scipy.signal.find_peaks(200 - d['vCar'], height=1, prominence=0.04)[0]
+    NApex = scipy.signal.find_peaks(200 - d['vCar'], height=10, prominence=NAPEXPROMINENCE)[0]
+    NApexHD = scipy.signal.find_peaks(200 - d['vCar'], height=1, prominence=NAPEXHDPROMINENCE)[0]
 
     BGearShiftInRange = filters.movingAverage(d['Gear'], 4) % 1
 
@@ -242,24 +257,13 @@ def optimise(dirPath, TelemPath):
 
     NApex = filterPoints(NApex, NApexHD)
 
-    # NApexHDUnique = [x for x in NApexHD if x not in NApex]
-    # np.argmin(abs(NApex - NApexHDUnique))
-
-    # NApex = scipy.signal.find_peaks(1 - d['rThrottle'], height=1, prominence=1, plateau_size=50)
-    # NApex = NApex[1]['right_edges']
-
-    dNApex = np.diff(d['sLap'][NApex]) < 50
+    dNApex = np.diff(d['sLap'][NApex]) < DISTANCEBETWEENAPICES
     if any(dNApex):
         for i in range(0, len(dNApex)):
             if dNApex[i]:
                 NApex = np.delete(NApex, i + 1)
 
-    print('NApex: ', NApex)
-    print('LapDistPctApex: ', d['LapDistPct'][NApex])
-
     print('\tFound {} apex points'.format(len(NApex)))
-    # print('NApex: ',  NApex)
-    # print('dNApex: ',  np.diff(NApex))
 
     plt.ioff()
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
@@ -281,7 +285,6 @@ def optimise(dirPath, TelemPath):
 
     for i in range(0, len(NApex)):
         if d['rThrottle'][NApex][i] == 1:
-            # d['rThrottle'][NApex[i]:NApex[i]+10] = 0
             z = 0
             while d['rThrottle'][NApex[i]-z] > 0:
                 z += 1
@@ -327,18 +330,12 @@ def optimise(dirPath, TelemPath):
     rThrottleClipped = (np.clip(c['rThrottle'], 0.8, 1)-0.8)*5
     rThrottleClipped[-1] = 0
     rThrottleClipped[0] = 1
-    NWOT = scipy.signal.find_peaks(rThrottleClipped, height=0.7, plateau_size=5)
-    # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
-    # gLongNeg = -np.clip(filters.movingAverage(c['rBrake'], 10), -2, -1)
-    # NBrake = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.02)*100 + gLongNeg, plateau_size=(100, 1000))
+    NWOT = scipy.signal.find_peaks(rThrottleClipped, height=NWOTHEIGHT, plateau_size=NWOTPLATEUSIZE)
 
-    NBrake = scipy.signal.find_peaks(c['vCar'], prominence=1)[0]
+    NBrake = scipy.signal.find_peaks(c['vCar'], prominence=NBRAKEPROMINENCE)[0]
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
-
-    # NBrake = NBrake[1]['right_edges']
-    # NBrake = NBrake[1]['left_edges']
 
     c['NApex'] = NApex
 
@@ -421,13 +418,6 @@ def optimise(dirPath, TelemPath):
     plt.ylabel('vCar [m/s]')
     plt.savefig(resultsDirPath + '/sections.png', dpi=300, orientation='landscape', progressive=True)
 
-    # print('NApex: ', NApex)
-    # print('sApex: ', c['sLap'][NApex])
-    # print('NWOT: ', NWOT)
-    # print('sWOT: ', c['sLap'][NWOT])
-    # print('NBrake: ', NBrake)
-    # print('sBrake: ', c['sLap'][NBrake])
-
     print('\nOptimisation Boundaries')
     print('\n\tPush Lap')
 
@@ -472,12 +462,9 @@ def optimise(dirPath, TelemPath):
     for i in range(0, len(NLiftEarliest)):
         print('\t\tLift zone: {}/{}'.format(i + 1, len(NLiftEarliest)))
         if NApex[i] - NLiftEarliest[i] <= 40:
-            # tLapRLift[i, :] = c['tLap'][-1]
-            # VFuelRLift[i, :] = c['VFuel'][-1]
             print('\t\t\tAborted...')
             continue
         for k in range(1, len(rLift)):
-            # print('Lift zone: {} - rLift: {}'.format(i, k))
             tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
 
     # get fuel consumption and lap time differences compared to original lap
@@ -485,8 +472,6 @@ def optimise(dirPath, TelemPath):
     VFuelRLift = VFuelRLift - c['VFuel'][-1]
 
     # remove outliners
-    # VFuelRLift[tLapRLift == 0] = nan
-    # tLapRLift[tLapRLift == 0] = nan
     tLapRLift[:, 0] = 0
     VFuelRLift[:, 0] = 0
 
@@ -518,7 +503,7 @@ def optimise(dirPath, TelemPath):
             plt.scatter(rLift, tLapRLift[i, :])
             plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, tLapPolyFit[i, 0], tLapPolyFit[i, 1], tLapPolyFit[i, 2], tLapPolyFit[i, 3], tLapPolyFit[i, 4], tLapPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(NZone[i]) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/timeLoss_LiftZone_' + str(int(NZone[i])) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
@@ -529,7 +514,7 @@ def optimise(dirPath, TelemPath):
             plt.scatter(rLift, VFuelRLift[i, :])
             plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
             plt.grid()
-            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(NZone[i]) + '.png', dpi=300, orientation='landscape', progressive=True)
+            plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(int(NZone[i])) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
     # maximum lift
@@ -601,35 +586,26 @@ def optimise(dirPath, TelemPath):
     # different Lift Levels
     print('\n\tCalculating Lift Points and Consumption')
     NTempPlot = [0, 25, 75, 90, 95, 97, 99]
-    # NTempPlot = range(35, 41)
 
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     plt.tight_layout()
-    # plt.plot(c['LapDistPct'], c['VFuel'], label='Push')
 
     LiftPointsVsFuelCons['VFuelLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
     LiftPointsVsFuelCons['VFuelReference'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
     LiftPointsVsFuelCons['VFuelBudget'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
     LiftPointsVsFuelCons['LapDistPctLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
 
-    corr = {'NLiftEarliest': NLiftEarliest, 'NBrake': NBrake, 'NReference': NReference, 'LiftGear': LiftGear, 'NApex': NApex}
-    checkVFuel = np.array([])
     checkVFuelBudget = np.array([])
     VFuelOffThrottle = np.array([])
     VFuelOnThrottle = np.array([])
-
-    print(NLiftEarliest)
-    print(NBrake)
     
     # Lift points/sections: 0 = approaching first corner
 
-    # NSplit = len(d['vCar']) - NCut - 1
     for i in range(0, len(VFuelTGT)):
         _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][i], car, c, NLiftEarliest, NBrake, None, False, LiftGear, NReference)
 
         VFuelTGT[i] = (R['VFuel'][-1] - R['VFuel'][0])
         VFuelCut2End = R['VFuel'][-1] - R['VFuel'][NCut]
-        VFuelStart2Cut = R['VFuel'][NCut] - R['VFuel'][0]
 
         # VFuel at lift points
         tempVFuelLift = R['VFuel'][R['NLift']]
@@ -638,9 +614,6 @@ def optimise(dirPath, TelemPath):
         LiftPointsVsFuelCons['VFuelLift'][i] = np.roll(tempVFuelLift, 1)
 
         # VFuel Budget
-        # VFuelReference_temp = R['VFuelReference'][1:]
-        # VFuelReference_temp = np.append(VFuelReference_temp, [R['VFuel'][-1] + R['VFuelReference'][0]])
-        # LiftPointsVsFuelCons['VFuelBudget'][i] = np.roll(VFuelReference_temp - R['VFuelLift'], 2)
         tempVFuelBudget = np.roll(R['VFuel'][R['NLift']], -1) - R['VFuelReference']
         tempVFuelBudget[-1] = VFuelTGT[i] - R['VFuelReference'][-1] + R['VFuel'][R['NLift']][0]
         LiftPointsVsFuelCons['VFuelBudget'][i] = np.roll(tempVFuelBudget, 2)
@@ -665,38 +638,11 @@ def optimise(dirPath, TelemPath):
 
         if i in NTempPlot:
             plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[i], 2)))
-        # plt.plot(R['LapDistPct'], R['vCar'], label=str(round(VFuelTGT[i], 2)))
-
-        if i == 50:
-            temp50 = copy.deepcopy(R)
-            # plt.scatter(R['LapDistPct'][NSplit], R['vCar'][NSplit], label=str(round(VFuelTGT[i], 2)))
-            # plt.plot(R['LapDisVFuelReference_temptPct'], R['VFuel'], label=str(round(VFuelTGT[i], 2)))
-            # plt.scatter(R['LapDistPct'][R['NLift']], R['VFuel'][R['NLift']], label=str(round(VFuelTGT[i], 2)))
-            # plt.scatter(R['LapDistPct'][R['NLift']], R['VFuel'][R['NLift']], label=str(round(VFuelTGT[i], 2)))
 
     plt.legend()
     plt.grid()
     plt.savefig(resultsDirPath + '/overview.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
-
-    # # get LapDistPct and VFuel a Lift Point
-    # LiftPointsVsFuelCons['LapDistPctLift'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    # LiftPointsVsFuelCons['VFuelLift2'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    # for i in range(0, len(NBrake)):  # lift zones
-    #     # flip because x data must be monotonically increasing
-    #     x = np.flip(1 - (np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1) - NLiftEarliest[i]) / (NBrake[i]-NLiftEarliest[i]))
-    #     y = np.flip(c['LapDistPct'][np.linspace(NLiftEarliest[i], NBrake[i], NBrake[i]-NLiftEarliest[i]+1, dtype='int32')])
-    #     for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
-    #         LiftPointsVsFuelCons['LapDistPctLift'][k, i] = np.interp(LiftPointsVsFuelCons['LiftPoints'][k, i], x, y)
-    #         LiftPointsVsFuelCons['VFuelLift2'][k, i] = np.interp(LiftPointsVsFuelCons['LapDistPctLift'][k, i], d['LapDistPct'], d['VFuel'])
-
-    # # get LapDistPct and VFuel a Apex Point
-    # LiftPointsVsFuelCons['LapDistPctApex'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    # LiftPointsVsFuelCons['VFuelApex'] = np.empty(np.shape(LiftPointsVsFuelCons['LiftPoints']))
-    # for i in range(0, len(NApex)):  # lift zones
-    #     for k in range(0, len(LiftPointsVsFuelCons['VFuelTGT'])):  # TGT
-    #         LiftPointsVsFuelCons['LapDistPctApex'][k, i] = c['LapDistPct'][NApex[i]]
-    #         LiftPointsVsFuelCons['VFuelApex'][k, i] = d['VFuel'][NApex[i]]
 
     NApex = NApex + len(d['vCar']) - NCut - 1
     NApex[NApex > len(d['vCar'])] = NApex[NApex > len(d['vCar'])] - len(d['vCar']) + 1
@@ -724,9 +670,6 @@ def optimise(dirPath, TelemPath):
     d['NWOT'] = NWOT
     d['NReference'] = NReference
 
-    print('NApex: ', d['NApex'])
-    print('LapDistPctApex: ', d['LapDistPct'][d['NApex']])
-
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     plt.tight_layout()
     plt.plot(d['LapDistPct'], d['vCar'], label='d original')
@@ -744,8 +687,6 @@ def optimise(dirPath, TelemPath):
     plt.legend()
     plt.grid()
     plt.tight_layout()
-    # manager = plt.get_current_fig_manager()
-    # manager.window.showMaximized()
     plt.savefig(resultsDirPath + '/resultsCheck.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
@@ -771,8 +712,6 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['LapDistPctBrake'] = d['LapDistPct'][d['NBrake']] * 100
     LiftPointsVsFuelCons['LapDistPctReference'] = d['LapDistPct'][d['NReference']] * 100
 
-    # LiftPointsVsFuelCons['LapDistPctLift'] = (LiftPointsVsFuelCons['LapDistPctLift'] + 1-c['LapDistPct'][NCut]) * 100
-    # LiftPointsVsFuelCons['LapDistPctLift'][LiftPointsVsFuelCons['LapDistPctLift'] > 100] = LiftPointsVsFuelCons['LapDistPctLift'][LiftPointsVsFuelCons['LapDistPctLift'] > 100] - 100
     LiftPointsVsFuelCons['SetupName'] = d['DriverInfo']['DriverSetupName']
     LiftPointsVsFuelCons['CarSetup'] = d['CarSetup']
     LiftPointsVsFuelCons['ibtFileName'] = ibtPath

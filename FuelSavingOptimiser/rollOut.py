@@ -11,6 +11,7 @@ import scipy.signal
 from functionalities.RTDB import RTDB
 from functionalities.libs import maths, importIBT, importExport, filters
 from libs.Car import Car
+from datetime import datetime
 
 
 def getRollOutCurve(dirPath, TelemPath):
@@ -58,7 +59,9 @@ def getRollOutCurve(dirPath, TelemPath):
     # TODO: check it telemetry file is suitable
 
     # create results directory
-    resultsDirPath = dirPath + "/data/fuelSaving/" + ibtPath.split('/')[-1].split('.ibt')[0]
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    resultsDirPath = dirPath + "/data/rollOut/" + dt_string + '_' + car.carPath + '_' + d['WeekendInfo']['TrackName']
     if not os.path.exists(resultsDirPath):
         os.mkdir(resultsDirPath)
 
