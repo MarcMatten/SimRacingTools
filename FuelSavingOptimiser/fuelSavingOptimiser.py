@@ -24,24 +24,31 @@ DISTANCEBETWEENAPICES = 50  # allowed distnace between apex points in filterPoin
 NBRAKEPROMINENCE = 1  # required prominence of peaks in inverted vCar to identify apex point
 NWOTPLATEUSIZE = 5  # required plateu size in clipped rThrottle to detect full throttle
 NWOTHEIGHT = 0.7  # required height in clipped rThrottle to detect full throttle
+SLIPANGLEDRAG1 = -0.001801  # linear dependency of slip angle induced gLong on gLat
+SLIPANGLEDRAG2 = -0.0001021  # quadratic dependency of slip angle induced gLong on gLat
+BWDSBRAKEAPEXRATIO = 0.95  # ration between brake and apex  point to start backwards marching from
 
 
-def costFcn(rLift, car, *args):
-    C = copy.deepcopy(args[0])  # data struct
-    NLiftEarliest = args[1]  # index of ealiest lift points
-    NBrake = args[2]  # index of braking points
-    VFuelTgt = args[3]  # fuel target for optimistion mode
-    optim = args[4]  # optimisation mode -> calc error?
-    LiftGear = args[5]
-    if len(args) >= 7:
-        NReference = args[6]
+def costFcn(rLift=0, car=None, dct=None, NLiftEarliest=None, NBrake=None, VFuelTgt=None, optim=True, LiftGear=None, NReference=None, NApex=None):
+    C = copy.deepcopy(dct)  # data struct
+    # NLiftEarliest = args[1]  # index of ealiest lift points
+    # NBrake = args[2]  # index of braking points
+    # VFuelTgt = args[3]  # fuel target for optimistion mode
+    # optim = args[4]  # optimisation mode -> calc error?
+    # LiftGear = args[5]
+    # # NApex = args[6]
+    # if len(args) >= 7:
+    #     NReference = args[6]
     C['NLift'] = np.array([], dtype=int)
     for i in range(0, len(NLiftEarliest)):
         NLift = NLiftEarliest[i] + int((1 - rLift[i]) * (NBrake[i] - NLiftEarliest[i]))
         C['NLift'] = np.append(C['NLift'], NLift)
-        if NBrake[i] == NLift:
+        # BValid = np.logical_and(NApex - NLiftEarliest > 40, NBrake - NLiftEarliest > 12)
+        if NBrake[i] == NLift or NApex[i] - NLiftEarliest[i] <= 40 or NBrake[i] - NLiftEarliest[i] <= 12:
+        # if NBrake[i] == NLift:
             continue
-        C = stepFwds(C, C['NLift'][i], LiftGear[i], car, NBrake[i])
+        C = stepFwds(C, C['NLift'][i], LiftGear[i], car, NBrake[i], C['vCar'][NApex][i])
+        # C = stepFwds(C, C['NLift'][i], LiftGear[i], car, NBrake[i])
 
     C = calcFuel(C)
     C = calcLapTime(C)
@@ -49,20 +56,21 @@ def costFcn(rLift, car, *args):
     if optim:
         return C['tLap'][-1] + abs(VFuelTgt - C['VFuel'][-1]) * 1000
     else:
-        if len(args) >= 7:
+        if type(NReference).__module__ == np.__name__:
             C['VFuelLift'] = C['VFuel'][C['NLift']]
             C['VFuelReference'] = C['VFuel'][NReference]
         return C['tLap'][-1], C['VFuel'][-1], C
 
 
-def stepFwds(x, n, LiftGear, car, NBrake):
+def stepFwds(x, n, LiftGear, car, NBrake, vCarApex=0):
     temp = copy.deepcopy(x)
     i = 0
 
-    while n < NBrake or temp['vCar'][n] < temp['vCar'][n + 1] and n + 1 < len(temp['vCar']):
+    while n < NBrake or temp['vCar'][n] < temp['vCar'][n + 1] and n + 1 < len(temp['vCar']) and vCarApex <= temp['vCar'][n]:
         vCar = temp['vCar'][n]
-        gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
-        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
+        gLat = abs(temp['CTrack'][n] * np.square(temp['vCar'][n]))
+        gLongCornering = SLIPANGLEDRAG2 * np.square(gLat) + SLIPANGLEDRAG1 * gLat
+        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLongCornering
         ds = temp['ds'][n]
         # print('{} | {} | {}'.format(vCar, gLong, ds))
         temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
@@ -89,30 +97,43 @@ def calcLapTime(x):
     return x
 
 
-def stepBwds(x, i, LiftGear, car, NApex_temp, NBrake):
+def stepBwds(x, NApex, LiftGear, car, NApex_temp, NBrake):
+
+    i = NBrake + int(BWDSBRAKEAPEXRATIO * (NApex - NBrake))
     n = i
+    k = 0
+
     temp = copy.deepcopy(x)
 
-    if NApex_temp == len(temp['vCar']) - 1:
-        NApex_temp = 0
+    while n + 1 >= NBrake:
+        # n = n - k
+        n = i - k
+        temp['vCar'][n:i] = x['vCar'][i]
 
-    while temp['vCar'][n] <= x['vCar'][n - 1] and n > NApex_temp:
-        vCar = temp['vCar'][n]
-        gLat = temp['CTrack'][n] * np.square(temp['vCar'][n])
-        gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLat * -0.001811
-        if i-n <= NSTEPSRAMPINGLONG:
-            gLong = gLong / (NSTEPSRAMPINGLONG+1-i+n)
-        ds = temp['ds'][n]
-        temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
-        temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
-        temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
-        temp['rThrottle'][n] = 0
-        n = n - 1
+        if NApex_temp == len(temp['vCar']) - 1:
+            NApex_temp = 0
 
-    if n <= NApex_temp:
-        n = NApex_temp + 10
-        temp = copy.deepcopy(x)
-        temp = stepFwds(temp, n, LiftGear, car, NBrake)
+        while n > 0 and temp['vCar'][n] <= x['vCar'][n - 1] and n > NApex_temp:
+            vCar = temp['vCar'][n]
+            gLat = abs(temp['CTrack'][n] * np.square(temp['vCar'][n]))
+            gLongCornering = SLIPANGLEDRAG2 * np.square(gLat) + SLIPANGLEDRAG1 * gLat
+            gLong = maths.polyVal(vCar, np.array(car.Coasting['gLongCoastPolyFit'][LiftGear])) - np.sin(temp['aTrackIncline'][n] / 180 * np.pi) + gLongCornering
+            if i-n <= NSTEPSRAMPINGLONG + k:
+                gLong = gLong / (NSTEPSRAMPINGLONG+k+1-i+n)
+            ds = temp['ds'][n]
+            temp['dt'][n] = -vCar / gLong - np.sqrt(np.square(vCar / gLong) + 2 * ds / gLong)
+            temp['vCar'][n - 1] = temp['vCar'][n] - gLong * temp['dt'][n]
+            temp['QFuel'][n] = maths.polyVal(vCar, np.array(car.Coasting['QFuelCoastPolyFit'][LiftGear]))
+            temp['rThrottle'][n] = 0
+            n = n - 1
+
+        if n <= NApex_temp:
+            n = NApex_temp + 10
+            temp = copy.deepcopy(x)
+            temp = stepFwds(temp, n, LiftGear, car, NBrake, x['vCar'][NApex])
+            # temp = stepFwds(temp, n, LiftGear, car, NBrake)
+
+        k += 1
 
     return temp, int(n + 1)
 
@@ -130,7 +151,8 @@ def calcFuelConstraint(rLift, *args):
     VFuelConsTGT = args[1]
     dVFuel = 0
     for i in range(0, len(rLift)):
-        dVFuel = dVFuel + maths.polyVal(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
+        # dVFuel = dVFuel + maths.polyVal(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5])
+        dVFuel = dVFuel + maths.polyVal(rLift[i], VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2])
     return dVFuel - VFuelConsTGT
 
 
@@ -435,7 +457,7 @@ def optimise(dirPath, TelemPath):
         else:
             NApex_temp = NApex[i - 1]
 
-        c_temp, n = stepBwds(c_temp, NBrake[i] + int(0.85 * (NApex[i] - NBrake[i])), LiftGear[i], car, NApex_temp, NBrake[i])
+        c_temp, n = stepBwds(c_temp, NApex[i], LiftGear[i], car, NApex_temp, NBrake[i])
         NLiftEarliest = np.append(NLiftEarliest, n)
 
     NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
@@ -445,9 +467,9 @@ def optimise(dirPath, TelemPath):
     plt.title('Earliest Lift Points')
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
-    plt.plot(c['sLap'], c['vCar'], label='Speed')
-    plt.plot(c_temp['sLap'], c_temp['vCar'], label='Maximum Lifting')
-    plt.scatter(c_temp['sLap'][NLiftEarliest], c_temp['vCar'][NLiftEarliest], label='Earliest Lift Point')
+    plt.plot(c['sLap'], c['vCar'], 'k', label='Speed')
+    plt.plot(c_temp['sLap'], c_temp['vCar'], 'r', label='Maximum Lifting')
+    plt.scatter(c_temp['sLap'][NLiftEarliest], c_temp['vCar'][NLiftEarliest], cmap='black', label='Earliest Lift Point')
     plt.grid()
     plt.legend()
     plt.savefig(resultsDirPath + '/earliestLift.png', dpi=300, orientation='landscape', progressive=True)
@@ -461,38 +483,50 @@ def optimise(dirPath, TelemPath):
 
     for i in range(0, len(NLiftEarliest)):
         print('\t\tLift zone: {}/{}'.format(i + 1, len(NLiftEarliest)))
-        if NApex[i] - NLiftEarliest[i] <= 40:
+        if NApex[i] - NLiftEarliest[i] <= 40 or NBrake[i] - NLiftEarliest[i] <= 12:
             print('\t\t\tAborted...')
             continue
         for k in range(1, len(rLift)):
-            tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]])
+            # tLapRLift[i, k], VFuelRLift[i, k], R = costFcn([rLift[k]], car, copy.deepcopy(c), [NLiftEarliest[i]], [NBrake[i]], None, False, [LiftGear[i]], [NApex[i]])
+            tLapRLift[i, k], VFuelRLift[i, k], R = costFcn(rLift=[rLift[k]], car=car, dct=copy.deepcopy(c), NLiftEarliest=[NLiftEarliest[i]], NBrake=[NBrake[i]], optim=False, LiftGear=[LiftGear[i]], NApex=[NApex[i]])
 
     # get fuel consumption and lap time differences compared to original lap
     tLapRLift = tLapRLift - c['tLap'][-1]
     VFuelRLift = VFuelRLift - c['VFuel'][-1]
 
     # remove outliners
-    tLapRLift[:, 0] = 0
-    VFuelRLift[:, 0] = 0
+    # tLapRLift[:, 0] = 0
+    # VFuelRLift[:, 0] = 0
+    tLapRLift[tLapRLift < 0] = 0
+    VFuelRLift[VFuelRLift > 0] = 0
 
     # fit lap time and fuel consumption polynomial for each lifting zone
     tLapPolyFit = np.zeros((len(NLiftEarliest), 6))
-    VFuelPolyFit = np.zeros((len(NLiftEarliest), 6))
+    VFuelPolyFit = np.zeros((len(NLiftEarliest), 3))
+
 
     rLiftPlot = np.linspace(0, 1, 1000)
 
-    NZone = np.roll(np.linspace(1, len(NLiftEarliest), len(NLiftEarliest) ),-1)
+    NZone = np.roll(np.linspace(1, len(NLiftEarliest), len(NLiftEarliest)), -1)
 
     for i in range(0, len(NLiftEarliest)):
         # remove nan indices
         yTime = tLapRLift[i, :]
         yFuel = VFuelRLift[i, :]
-        x = rLift[~np.isnan(yTime)]
+        rLiftClean = rLift[:]
+        x = rLiftClean[~np.isnan(yTime)]
         f = yFuel[~np.isnan(yTime)]
         t = yTime[~np.isnan(yTime)]
 
-        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, t, [0] * 6)
-        VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, f, [0] * 6)
+        sigmaV = np.ones(len(x))
+        sigmaT = sigmaV
+        sigmaT[0:5] = 0.01
+        sigmaV[[0, -1]] = 0.01
+
+        # tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, t, [0] * 6, bounds=(np.append(0, [-np.inf]*5), np.append(0, [np.inf]*5)))
+        # VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, f, [0] * 6, bounds=(np.append(0, [-np.inf]*5), np.append(0, [np.inf]*5)))
+        tLapPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, t, [0] * 6, sigma=sigmaT)
+        VFuelPolyFit[i, :], temp = scipy.optimize.curve_fit(maths.polyVal, x, f, [0] * 3)
 
         if BPlot:  # TODO: save these plots in a subdirectory
             plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
@@ -512,13 +546,15 @@ def optimise(dirPath, TelemPath):
             plt.xlabel('rLift [-]')
             plt.ylabel('dVFuel [l]')
             plt.scatter(rLift, VFuelRLift[i, :])
-            plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
+            # plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2], VFuelPolyFit[i, 3], VFuelPolyFit[i, 4], VFuelPolyFit[i, 5]))
+            plt.plot(rLiftPlot, maths.polyVal(rLiftPlot, VFuelPolyFit[i, 0], VFuelPolyFit[i, 1], VFuelPolyFit[i, 2]))
             plt.grid()
             plt.savefig(resultsDirPath + '/fuelSave_LiftZone_' + str(int(NZone[i])) + '.png', dpi=300, orientation='landscape', progressive=True)
             plt.close()
 
     # maximum lift
-    tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), car, c, NLiftEarliest, NBrake, None, False, LiftGear)
+    tLapMaxSave, VFuelMaxSave, R = costFcn(rLift=np.ones(len(NLiftEarliest)), car=car, dct=c, NLiftEarliest=NLiftEarliest, NBrake=NBrake, optim=False, LiftGear=LiftGear, NApex=NApex)
+    # tLapMaxSave, VFuelMaxSave, R = costFcn(np.ones(len(NLiftEarliest)), car, c, NLiftEarliest, NBrake, None, False, LiftGear, NApex)
 
     # optimisation for 100 steps between maximum lift and push
     VFuelTGT = np.linspace(VFuelMaxSave, c['VFuel'][-1], 100)
@@ -554,7 +590,9 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['VFuelTGT'] = VFuelTGT
     LiftPointsVsFuelCons['tLapDelta'] = fun
 
-    tLapVFuelPolyFit, _ = scipy.optimize.curve_fit(maths.polyVal, LiftPointsVsFuelCons['VFuelTGT'], fun, [0] * 6)
+    sigma = np.ones(len(fun))
+    sigma[-25:] = 0.01
+    tLapVFuelPolyFit, _ = scipy.optimize.curve_fit(maths.polyVal, LiftPointsVsFuelCons['VFuelTGT'], fun, [0] * 6, sigma=sigma)
 
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     plt.tight_layout()
@@ -602,7 +640,11 @@ def optimise(dirPath, TelemPath):
     # Lift points/sections: 0 = approaching first corner
 
     for i in range(0, len(VFuelTGT)):
-        _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][i], car, c, NLiftEarliest, NBrake, None, False, LiftGear, NReference)
+
+        # BValid = np.logical_and(NApex - NLiftEarliest > 40, NBrake - NLiftEarliest > 12)
+
+        _, _, R = costFcn(rLift=LiftPointsVsFuelCons['LiftPoints'][i], car=car, dct=c, NLiftEarliest=NLiftEarliest, NBrake=NBrake, optim=False, LiftGear=LiftGear, NReference=NReference, NApex=NApex)
+        # _, _, R = costFcn(LiftPointsVsFuelCons['LiftPoints'][i], car, c, NLiftEarliest, NBrake, None, False, LiftGear, NReference, NApex)
 
         VFuelTGT[i] = (R['VFuel'][-1] - R['VFuel'][0])
         VFuelCut2End = R['VFuel'][-1] - R['VFuel'][NCut]

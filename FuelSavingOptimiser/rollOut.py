@@ -14,7 +14,7 @@ from libs.Car import Car
 from datetime import datetime
 
 
-def getRollOutCurve(dirPath, TelemPath):
+def getRollOutCurve(dirPath, TelemPath, MotecProjectPath):
     root = tk.Tk()
     root.withdraw()
 
@@ -151,9 +151,10 @@ def getRollOutCurve(dirPath, TelemPath):
     car.setCoastingData(gLongPolyFit, QFuelPolyFit, NGear, d['DriverInfo']['DriverSetupName'], d['CarSetup'])
     car.setGearRatios(rGearRatios)
     car.save(carFilePath)
+    car.MotecXMLexport(dirPath, MotecProjectPath)
 
     print(time.strftime("%H:%M:%S", time.localtime()) + ':\tCompleted roll-out calculation!')
 
 
 if __name__ == "__main__":
-    getRollOutCurve('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry')
+    getRollOutCurve('C:/Users/marc/Documents/iDDU', 'C:/Users/marc/Documents/iRacing/telemetry', 'C:/Users/marc/Documents/MoTeC/i2/Workspaces/Circuit 1')

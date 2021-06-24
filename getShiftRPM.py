@@ -15,7 +15,7 @@ from libs.Car import Car
 from SimRacingTools.getGearRatios import getGearRatios
 
 
-def getShiftRPM(dirPath, TelemPath, MotecProjectPath):
+def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
     tReaction = 0.3  # TODO: as input to tune from GUI
 
     root = tk.Tk()
