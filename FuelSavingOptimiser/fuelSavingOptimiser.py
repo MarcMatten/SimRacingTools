@@ -12,6 +12,7 @@ import scipy.signal
 from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
 from datetime import datetime
+from libs.setReferenceLap import setReferenceLap
 
 nan = float('nan')
 
@@ -22,8 +23,8 @@ NAPEXPROMINENCE = 1  # required prominence of peaks in vCar to identify apex poi
 NAPEXHDPROMINENCE = 0.04  # required prominence of peaks in vCar to identify HD apex point
 DISTANCEBETWEENAPICES = 50  # allowed distnace between apex points in filterPoints
 NBRAKEPROMINENCE = 1  # required prominence of peaks in inverted vCar to identify apex point
-NWOTPLATEUSIZE = 5  # required plateu size in clipped rThrottle to detect full throttle
-NWOTHEIGHT = 0.7  # required height in clipped rThrottle to detect full throttle
+NWOTPLATEUSIZE = 1  # required plateu size in clipped rThrottle to detect full throttle
+NWOTHEIGHT = 0.5  # required height in clipped rThrottle to detect full throttle
 SLIPANGLEDRAG1 = -0.001801  # linear dependency of slip angle induced gLong on gLat
 SLIPANGLEDRAG2 = -0.0001021  # quadratic dependency of slip angle induced gLong on gLat
 BWDSBRAKEAPEXRATIO = 0.95  # ration between brake and apex  point to start backwards marching from
@@ -228,8 +229,11 @@ def optimise(dirPath, TelemPath):
     # imoport ibt file
     d, _ = importIBT.importIBT(ibtPath,
                                lap='f',
-                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'VFuel', 'gLat'],
+                               channels=['zTrack', 'LapDistPct', 'rThrottle', 'rBrake', 'QFuel', 'SessionTime', 'VelocityX', 'VelocityY', 'Yaw', 'Gear', 'VFuel', 'gLat', 'YawNorth'],
                                channelMapPath=dirPath + '/functionalities/libs/iRacingChannelMap.csv')  # TODO: check if data is sufficient
+
+    # set as reference lap
+    setReferenceLap(dirPath=dirPath, TelemPath=TelemPath, ibtFile=d)
 
     # If car file exists, load it. Otherwise, throw an error. TODO: whole section is duplicate with rollOut
     car = Car(Driver=d['DriverInfo']['Drivers'][d['DriverInfo']['DriverCarIdx']])
@@ -350,6 +354,7 @@ def optimise(dirPath, TelemPath):
 
     # find potential lift point (from full throttle to braking)
     rThrottleClipped = (np.clip(c['rThrottle'], 0.8, 1)-0.8)*5
+    # rThrottleClipped = (np.clip(c['rThrottle'], 0.1, 0.5)-0.1)/0.4
     rThrottleClipped[-1] = 0
     rThrottleClipped[0] = 1
     NWOT = scipy.signal.find_peaks(rThrottleClipped, height=NWOTHEIGHT, plateau_size=NWOTPLATEUSIZE)
@@ -460,7 +465,7 @@ def optimise(dirPath, TelemPath):
         c_temp, n = stepBwds(c_temp, NApex[i], LiftGear[i], car, NApex_temp, NBrake[i])
         NLiftEarliest = np.append(NLiftEarliest, n)
 
-    NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
+    # NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
 
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
     plt.tight_layout()
@@ -763,7 +768,8 @@ def optimise(dirPath, TelemPath):
     LiftPointsVsFuelCons['VFuelBudget'] = LiftPointsVsFuelCons['VFuelBudget'].transpose()
     LiftPointsVsFuelCons['VFuelLift'] = LiftPointsVsFuelCons['VFuelLift'].transpose()
     LiftPointsVsFuelCons['VFuelReference'] = LiftPointsVsFuelCons['VFuelReference'].transpose()
-    LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
+    LiftPointsVsFuelCons['LiftPoints'] = np.roll(LiftPointsVsFuelCons['LiftPoints'], 1, axis=1).transpose()
+    # LiftPointsVsFuelCons['LiftPoints'] = LiftPointsVsFuelCons['LiftPoints'].transpose()
     LiftPointsVsFuelCons['SFuelConfigCarName'] = car.name
     LiftPointsVsFuelCons['SFuelConfigTrackName'] = d['WeekendInfo']['TrackName']
 
