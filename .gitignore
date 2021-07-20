@@ -5,3 +5,4 @@
 /FuelSavingOptimiser/.idea/*.iml
 /FuelSavingOptimiser/.idea
 *.pyo
+*.log
