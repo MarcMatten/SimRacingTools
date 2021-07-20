@@ -2,7 +2,7 @@ import copy
 import os
 import time
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +13,7 @@ from functionalities.libs import filters, maths, importIBT, importExport
 from libs.Car import Car
 from datetime import datetime
 from libs.setReferenceLap import setReferenceLap
+
 
 nan = float('nan')
 
@@ -212,6 +213,84 @@ def filterPoints(a, b):
     return np.unique(res).astype(int)
 
 
+def filterPoints2(a, b):
+    n = 0
+    res = np.array([])
+    delta = np.array([])
+
+    idxA = 0
+    idxB = 0
+
+    for i in range(0, len(b)):
+        l = len(res)
+
+        delta = np.append(delta, np.min(np.abs(a - b[idxB])))
+        idxDelta = np.argmin(np.abs(a - b[idxB]))
+
+        # print('{} | {} | {}'.format(a[idxA], b[idxB], delta[i]))
+
+        if idxDelta == idxA:
+            if 0 < delta[i] <= DISTANCEAPEXSHIFT and a[l] > b[idxB]:
+                res = np.append(res, b[idxB])
+                n += 1
+                idxB += 1
+                idxA += 1
+            elif delta[i] == 0:
+                if idxB < len(b):
+                    res = np.append(res, b[idxB])
+                idxA += 1
+                idxB += 1
+            else:
+                idxB += 1
+
+            if idxA == len(a) or idxB == len(b):
+                break
+        else:
+            idxB += 1
+
+    return np.unique(res).astype(int)
+
+def checkPoints(data=dict, points=np.array, name=str) -> None:
+
+    PTS = points
+    BOK = False
+
+    plt.ion()
+    # plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
+    # plt.tight_layout()
+    plt.plot(data['vCar'], 'k', label='Speed')
+    plt.plot(data['rThrottle'] * 10, 'g', label='rThrottle')
+    plt.plot(data['rBrake'] * 10, 'r', label='rBrake')
+    plt.grid()
+    plt.title('Check {} Points'.format(name))
+    plt.xlabel('Index [1]')
+    plt.ylabel('vCar [m/s]')
+
+    while not BOK:
+        p1 = plt.scatter(PTS, data['vCar'][PTS], label='{} Points'.format(name), marker='o', edgecolors='k')
+        p2 = plt.scatter(PTS, data['rThrottle'][PTS] * 10, label='{} Points'.format(name), marker='o', edgecolors='k')
+        p3 = plt.scatter(PTS, data['rBrake'][PTS] * 10, label='{} Points'.format(name), marker='o', edgecolors='k')
+
+        USER_INP = simpledialog.askstring(title='{} Points'.format(name),
+                                          prompt='Insert {} Point Indices (separated with comma)'.format(name),
+                                          initialvalue=', '.join(map(str, PTS)))
+
+        if USER_INP == None:
+            BOK = True
+            continue
+        else:
+            PTS = np.array([int(x) for x in USER_INP.replace(' ', '').split(',')])
+
+            p1.remove()
+            p2.remove()
+            p3.remove()
+
+
+    plt.close()
+    plt.ioff()
+    return PTS
+
+
 def optimise(dirPath, TelemPath):
     BPlot = True
 
@@ -282,6 +361,9 @@ def optimise(dirPath, TelemPath):
     NApexHD = [elem for elem in NApexHD if BGearShiftInRange[elem] == 0.0 and d['Gear'][elem] > 0]
 
     NApex = filterPoints(NApex, NApexHD)
+
+    # TODO: check apex points
+    NApex = checkPoints(d, NApex, 'Apex')
 
     dNApex = np.diff(d['sLap'][NApex]) < DISTANCEBETWEENAPICES
     if any(dNApex):
@@ -360,6 +442,10 @@ def optimise(dirPath, TelemPath):
     NWOT = scipy.signal.find_peaks(rThrottleClipped, height=NWOTHEIGHT, plateau_size=NWOTPLATEUSIZE)
 
     NBrake = scipy.signal.find_peaks(c['vCar'], prominence=NBRAKEPROMINENCE)[0]
+    # NBrake = scipy.signal.find_peaks(1 - np.clip(c['rBrake'], 0.1, 1), plateau_size=(30, 10000), height=0.8, prominence=0.25)
+    NBrake2 = scipy.signal.find_peaks(np.clip(c['rBrake'], 0.01, 0.5), plateau_size=5)[1]['left_edges']
+
+    # xyz = filterPoints2(NBrake, NBrake2)
 
     # sections for potential lifting
     NWOT = NWOT[1]['left_edges']
@@ -423,6 +509,13 @@ def optimise(dirPath, TelemPath):
     NReference = np.array(NBrake + (NApex - NBrake) * 0.5, dtype=int)
     NWOT = np.flip(NWOTNew).astype(int)
 
+
+    # TODO: check Brake points
+    NBrake = checkPoints(c, NBrake, 'Brake')
+
+    # TODO: check WOT points
+    NWOT = checkPoints(c, NWOT, 'Full Throttle')
+
     c['NApex'] = NApex
     c['NBrake'] = NBrake
     c['NReference'] = NReference
@@ -444,6 +537,7 @@ def optimise(dirPath, TelemPath):
     plt.xlabel('sLap [m]')
     plt.ylabel('vCar [m/s]')
     plt.savefig(resultsDirPath + '/sections.png', dpi=300, orientation='landscape', progressive=True)
+    plt.close()
 
     print('\nOptimisation Boundaries')
     print('\n\tPush Lap')
@@ -464,6 +558,8 @@ def optimise(dirPath, TelemPath):
 
         c_temp, n = stepBwds(c_temp, NApex[i], LiftGear[i], car, NApex_temp, NBrake[i])
         NLiftEarliest = np.append(NLiftEarliest, n)
+
+    NLiftEarliest = checkPoints(c_temp, NLiftEarliest, 'Earliest Lift Points')
 
     # NLiftEarliest = np.maximum(NWOT, NLiftEarliest)
 
