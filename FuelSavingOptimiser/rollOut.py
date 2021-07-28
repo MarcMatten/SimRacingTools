@@ -97,8 +97,8 @@ def getRollOutCurve(dirPath, TelemPath, MotecProjectPath):
         d['BGear'][i] = np.logical_and(d['BCoastingInGear'], d['Gear'] == NGear[i])
 
         if i == 0:
-            gLongPolyFit[i] = [0, 0, 0]
-            QFuelPolyFit[i] = [0, 0, 0]
+            gLongPolyFit[i] = np.array([0, 0, 0])
+            QFuelPolyFit[i] = np.array([0, 0, 0])
         else:
             gLongPolyFit[i], _ = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['gLong'][d['BGear'][i]], [0, 0, 0])
             QFuelPolyFit[i], _ = scipy.optimize.curve_fit(maths.polyVal, d['vCar'][d['BGear'][i]], d['QFuel'][d['BGear'][i]], [0, 0, 0])
