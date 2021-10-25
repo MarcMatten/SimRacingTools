@@ -17,6 +17,7 @@ from SimRacingTools.getGearRatios import getGearRatios
 
 def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
     tReaction = 0.3  # TODO: as input to tune from GUI
+    tLEDs = np.array([1, 0.5, 0])
 
     root = tk.Tk()
     root.withdraw()
@@ -137,6 +138,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
 
     vCarShiftOptimal = []
     vCarShiftTarget = []
+    vCarShiftLEDS = []
 
     for k in range(0, np.max(d['Gear']) - 1):
         f1 = lambda x: maths.polyVal(x, gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3])
@@ -146,6 +148,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
 
         vCarShiftOptimal.append(np.min([result[0], vCarMax[k]]))
         vCarShiftTarget.append(vCarShiftOptimal[k] - tReaction * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
+        vCarShiftLEDS.append(vCarShiftOptimal[k] - (tLEDs + tReaction) * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
 
         plt.scatter(vCarShiftOptimal[k], f1(vCarShiftOptimal[k]), marker='o', color='black', zorder=99)
         plt.scatter(vCarShiftTarget[k], f1(vCarShiftTarget[k]), marker='o', color='red', zorder=99)
@@ -163,6 +166,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
 
     nMotorShiftOptimal = []
     nMotorShiftTarget = []
+    nMotorShiftLEDs = []
 
     for i in range(0, np.max(d['Gear'])):
         vCar = np.linspace(vCarMin[i] - 10, vCarMax[i] + 10, 100)
@@ -171,6 +175,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
         if i < np.max(d['Gear']) - 1:
             nMotorShiftOptimal.append(maths.polyVal(vCarShiftOptimal[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
             nMotorShiftTarget.append(maths.polyVal(vCarShiftTarget[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
+            nMotorShiftLEDs.append(maths.polyVal(vCarShiftLEDS[i], RPMPolyFit[i][0], RPMPolyFit[i][1], RPMPolyFit[i][2]))
             plt.scatter(vCarShiftOptimal[i], nMotorShiftOptimal[i], marker='o', color='black', zorder=99)
             plt.scatter(vCarShiftTarget[i], nMotorShiftTarget[i], marker='o', color='red', zorder=99)
 
@@ -180,7 +185,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
     rGearRatios = getGearRatios(d, resultsDirPath)
 
     # save so car file
-    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], d['DriverInfo']['DriverSetupName'], d['CarSetup'], int(max(NGear)))
+    car.setShiftRPM(nMotorShiftOptimal, vCarShiftOptimal, nMotorShiftTarget, vCarShiftTarget, NGear[0:-1], d['DriverInfo']['DriverSetupName'], d['CarSetup'], int(max(NGear)), nMotorShiftLEDs)
     car.setGearRatios(rGearRatios)
     car.save(carFilePath)
     car.MotecXMLexport(dirPath, MotecProjectPath)
