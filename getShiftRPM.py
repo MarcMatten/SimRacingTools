@@ -18,6 +18,7 @@ from SimRacingTools.getGearRatios import getGearRatios
 def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
     tReaction = 0.3  # TODO: as input to tune from GUI
     tLEDs = np.array([1, 0.5, 0])
+    BUseMaxRPM = True
 
     root = tk.Tk()
     root.withdraw()
@@ -134,7 +135,7 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
         vCar = np.linspace(vCarMin[i] - 5, vCarMax[i] + 5, 100)
 
         plt.scatter(d['vCar'][d['BRPMRange'][i]], d['gLong'][d['BRPMRange'][i]], marker='.', zorder=1, color=cmap(i))
-        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]), label='Gear {}'.format(i+1), zorder=2,color=cmap(i+2))
+        plt.plot(vCar, maths.polyVal(vCar, gLongPolyFit[i][0], gLongPolyFit[i][1], gLongPolyFit[i][2], gLongPolyFit[i][3]), label='Gear {}'.format(i+1), zorder=2, color=cmap(i+2))
 
     vCarShiftOptimal = []
     vCarShiftTarget = []
@@ -146,7 +147,11 @@ def getShiftRPM(dirPath=str, TelemPath=str, MotecProjectPath=str):
 
         result = maths.findIntersection(f1, f2, vCarMax[k])
 
-        vCarShiftOptimal.append(np.min([result[0], vCarMax[k]]))
+        if BUseMaxRPM:
+            vCarShiftOptimal.append(vCarMax[k])
+        else:
+            vCarShiftOptimal.append(np.min([result[0], vCarMax[k]]))
+
         vCarShiftTarget.append(vCarShiftOptimal[k] - tReaction * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
         vCarShiftLEDS.append(vCarShiftOptimal[k] - (tLEDs + tReaction) * maths.polyVal(vCarShiftOptimal[k], gLongPolyFit[k][0], gLongPolyFit[k][1], gLongPolyFit[k][2], gLongPolyFit[k][3]))
 

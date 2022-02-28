@@ -705,6 +705,11 @@ def optimise(dirPath, TelemPath):
     plt.grid()
     plt.legend()
     plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel.png', dpi=300, orientation='landscape', progressive=True)
+
+    left, right = plt.xlim()
+    plt.xlim(right-0.5, right+0.05)
+    plt.ylim(-0.1, 1)
+    plt.savefig(resultsDirPath + '/DetlatLap_vs_VFuel2.png', dpi=300, orientation='landscape', progressive=True)
     plt.close()
 
     plt.figure(figsize=[16, 9], dpi=300)  # TODO: make plot nice
